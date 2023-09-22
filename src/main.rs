@@ -8,7 +8,7 @@ const STAFF_ROLE: u64 = 0;
 
 #[tokio::main]
 async fn main() -> Result<(), SerenityError> {
-    let client = Client::builder("L48ndSlt1JGCghJXqHSFw10oPHdzgt_d", intents()).event_handler(Bot);
+    let client = Client::builder(get_secret(), intents()).event_handler(Bot);
     client.await?;
     Ok(())
 }
@@ -35,4 +35,8 @@ fn intents() -> GatewayIntents {
 
 async fn is_mod(ctx: Context, message: Message) -> bool {
     message.author.has_role(ctx.http, BABACORD_ID, STAFF_ROLE).await.unwrap_or(false)
+}
+
+fn get_secret() -> String {
+    include_str!("secret.txt").to_owned()
 }
