@@ -46,7 +46,6 @@ mod test {
     fn time_parse_seconds() {
         let target = Time { seconds: 7, minutes: 0, hours: 0, days: 0 };
         let parsed = Time::from_str("7s");
-        assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
         assert_eq!(target, parsed);
     }
@@ -54,7 +53,6 @@ mod test {
     fn time_parse_minutes() {
         let target = Time { seconds: 0, minutes: 34, hours: 0, days: 0 };
         let parsed = Time::from_str("34m");
-        assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
         assert_eq!(target, parsed);
     }
@@ -63,7 +61,6 @@ mod test {
     fn time_parse_hours() {
         let target = Time { seconds: 0, minutes: 0, hours: 9, days: 0 };
         let parsed = Time::from_str("9h");
-        assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
         assert_eq!(target, parsed);
     }
@@ -71,15 +68,13 @@ mod test {
     fn time_parse_days() {
         let target = Time { seconds: 0, minutes: 0, hours: 0, days: 3 };
         let parsed = Time::from_str("3d");
-        assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
         assert_eq!(target, parsed);
     }
     #[test]
     fn time_parse_complex() {
-        let target = Time { seconds: 0, minutes: 30, hours: 2, days: 3 };
+        let target = Time { seconds: 0, minutes: 30, hours: 2, days: 0 };
         let parsed = Time::from_str("2h30m");
-        assert!(parsed.is_ok());
         let parsed = parsed.unwrap();
         assert_eq!(target, parsed);
     }

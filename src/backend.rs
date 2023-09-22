@@ -18,13 +18,16 @@ pub enum Command {
     PrivateModMessage { message: String, user: String },
     /// Shows an XKCD link
     Xkcd(u32),
-    /// The command wasn't valid
+    /// The command wasn't valid (for one reason or another)
     NotValid(String),
     /// The message wasn't a given command
     NotACommand,
 }
 
 impl Command {
+    /// Tells a command that a moderator role is required.
+    /// If the role is not present, the command is turned into [`Command::NotValid`],
+    /// else the command is returned unchanged.
     pub async fn requires_mod(self, ctx: &Context, message: &Message) -> Self {
         if is_mod(ctx, message).await {
             self
@@ -110,7 +113,7 @@ impl FromStr for Time {
         let mut time = Time::default();
         for each in s.split_inclusive(|chr: char| allowed_chars.contains(&chr)) {
             let (time_change, duration): (String, String) =
-                each.chars().partition(|x| x.is_alphabetic());
+                each.chars().partition(|x| !x.is_alphabetic());
             if let Ok(val) = time_change.clone().parse::<u8>() {
                 match duration.chars().next().unwrap_or('\\') {
                     's' => time.seconds = val,
