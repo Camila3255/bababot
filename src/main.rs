@@ -5,9 +5,6 @@ use backend::*;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-const BABACORD_ID: u64 = 556333985882439680;
-const STAFF_ROLE: u64 = 564541527108616193;
-
 #[tokio::main]
 async fn main() -> Result<(), SerenityError> {
     let client = Client::builder(get_secret(), intents()).event_handler(Bot);
@@ -20,8 +17,7 @@ struct Bot;
 #[async_trait::async_trait]
 impl EventHandler for Bot {
     async fn message(&self, ctx: Context, message: Message) {
-        let command = Command::parse_from_message(&message);
-        let moderator = is_mod(&ctx, &message).await;
+        let command = Command::parse_from_message(&ctx, &message).await;
         command.execute_command(ctx, message);
     }
 }
@@ -37,14 +33,54 @@ fn intents() -> GatewayIntents {
         .union(GI::GUILD_MESSAGE_TYPING)
 }
 
-async fn is_mod(ctx: &Context, message: &Message) -> bool {
-    message
-        .author
-        .has_role(ctx.clone().http, BABACORD_ID, STAFF_ROLE)
-        .await
-        .unwrap_or(false)
-}
-
 fn get_secret() -> String {
     include_str!("secret.txt").to_owned()
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use crate::*;
+    #[test]
+    fn time_parse_seconds() {
+        let target = Time { seconds: 7, minutes: 0, hours: 0, days: 0 };
+        let parsed = Time::from_str("7s");
+        assert!(parsed.is_ok());
+        let parsed = parsed.unwrap();
+        assert_eq!(target, parsed);
+    }
+    #[test]
+    fn time_parse_minutes() {
+        let target = Time { seconds: 0, minutes: 34, hours: 0, days: 0 };
+        let parsed = Time::from_str("34m");
+        assert!(parsed.is_ok());
+        let parsed = parsed.unwrap();
+        assert_eq!(target, parsed);
+    }
+
+    #[test]
+    fn time_parse_hours() {
+        let target = Time { seconds: 0, minutes: 0, hours: 9, days: 0 };
+        let parsed = Time::from_str("9h");
+        assert!(parsed.is_ok());
+        let parsed = parsed.unwrap();
+        assert_eq!(target, parsed);
+    }
+    #[test]
+    fn time_parse_days() {
+        let target = Time { seconds: 0, minutes: 0, hours: 0, days: 3 };
+        let parsed = Time::from_str("3d");
+        assert!(parsed.is_ok());
+        let parsed = parsed.unwrap();
+        assert_eq!(target, parsed);
+    }
+    #[test]
+    fn time_parse_complex() {
+        let target = Time { seconds: 0, minutes: 30, hours: 2, days: 3 };
+        let parsed = Time::from_str("2h30m");
+        assert!(parsed.is_ok());
+        let parsed = parsed.unwrap();
+        assert_eq!(target, parsed);
+    }
 }
