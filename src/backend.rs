@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display, str::FromStr};
 
 use serenity::{model::prelude::*, prelude::Context};
 
-const PREFIX: &'static str = "-";
+const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 556333985882439680;
 pub const STAFF_ROLE: u64 = 564541527108616193;
 
@@ -17,7 +17,7 @@ pub enum Command {
     /// Gives a message privately to the staff bot channel
     PrivateModMessage { message: String, user: String },
     /// Shows an XKCD link
-    XKCD(u32),
+    Xkcd(u32),
     /// The command wasn't valid
     NotValid(String),
     /// The message wasn't a given command
@@ -66,7 +66,7 @@ impl Command {
                     .requires_mod(ctx, message)
                     .await
             }
-            "xkcd" => Command::XKCD(args[1].parse().unwrap_or(378)),
+            "xkcd" => Command::Xkcd(args[1].parse().unwrap_or(378)),
             "notice" => {
                 let notice = args
                     .clone()
@@ -90,7 +90,7 @@ impl Command {
             arg => Command::NotValid(format!("`{arg}` is not a valid command!")),
         }
     }
-    pub fn execute_command(self, ctx: Context, message: Message) {}
+    pub fn execute_command(self, _ctx: Context, _message: Message) {}
 }
 
 /// A representation of a time string (e.g. "2h30m")
@@ -106,7 +106,7 @@ impl FromStr for Time {
     type Err = TimeErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let allowed_chars = vec!['s', 'm', 'h', 'd'];
+        let allowed_chars = ['s', 'm', 'h', 'd'];
         let mut time = Time::default();
         for each in s.split_inclusive(|chr: char| allowed_chars.contains(&chr)) {
             let (time_change, duration): (String, String) =
