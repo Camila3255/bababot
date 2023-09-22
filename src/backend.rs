@@ -17,7 +17,7 @@ pub enum Command {
     /// Shows an XKCD link
     XKCD(u32),
     /// The command wasn't valid
-    NotValid(&'static str),
+    NotValid(String),
     /// The message wasn't a given command
     NotACommand
 }
@@ -67,11 +67,9 @@ pub fn parse_command(message: Message) -> Command {
     }
     let args = message.content.split(|chr: char| chr.is_whitespace()).collect::<Vec<_>>();
     if args.is_empty() {
-        return Command::NotValid("");
+        return Command::NotACommand;
     }
     match args[0] {
-        _ => 
+        arg => return Command::NotValid(format!("`{arg}` is not a valid command!")),
     }
-
-    Command::NotValid("Could not parse command!")
 }
