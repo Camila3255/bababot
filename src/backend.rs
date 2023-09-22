@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use serenity::model::prelude::*;
+use serenity::{model::prelude::*, prelude::Context};
 
 const PREFIX: &'static str = "-";
 
@@ -29,8 +29,29 @@ impl Command {
             _ => false
         }
     }
+    pub fn parse_from_message(message: &Message) -> Self {
+        if !message.content.starts_with(PREFIX) {
+            return Command::NotACommand;
+        }
+        let args = message.content.split(|chr: char| chr.is_whitespace()).collect::<Vec<_>>();
+        if args.is_empty() {
+            return Command::NotACommand;
+        }
+        match args[0] {
+            "ban" => todo!(),
+            "mute" => todo!(),
+            "xkcd" => Command::XKCD(args[1].parse().unwrap_or(378)),
+            "notice" => todo!(),
+            "mail" => todo!(),
+            arg => Command::NotValid(format!("`{arg}` is not a valid command!")),
+        }
+    }
+    pub fn execute_command(self, ctx: Context, message: Message) {
+
+    }
 }
 
+/// A representation of a time string (e.g. "2h30m")
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Time {
     pub seconds: u8,
@@ -58,18 +79,5 @@ impl FromStr for Time {
             }
         }
         Ok(time)
-    }
-}
-
-pub fn parse_command(message: Message) -> Command {
-    if !message.content.starts_with(PREFIX) {
-        return Command::NotACommand;
-    }
-    let args = message.content.split(|chr: char| chr.is_whitespace()).collect::<Vec<_>>();
-    if args.is_empty() {
-        return Command::NotACommand;
-    }
-    match args[0] {
-        arg => return Command::NotValid(format!("`{arg}` is not a valid command!")),
     }
 }
