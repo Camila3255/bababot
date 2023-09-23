@@ -22,6 +22,8 @@ pub enum Command {
     Xkcd(u32),
     /// Sends, literally, https://dontasktoask.com/
     DontAskToAsk,
+    /// Help Command
+    Help(Option<CommandType>),
     /// The command wasn't valid (for one reason or another)
     NotValid(String),
     /// The message wasn't a given command
@@ -159,7 +161,8 @@ pub enum CommandType {
     Xkcd,
     DontAskToAsk,
     NotValid,
-    NotACommand
+    NotACommand,
+    Help
 }
 
 impl CommandType {
@@ -180,6 +183,7 @@ impl CommandType {
             CommandType::DontAskToAsk => todo!(),
             CommandType::NotValid => todo!(),
             CommandType::NotACommand => todo!(),
+            CommandType::Help => todo!(),
         }
     }
 }
@@ -195,6 +199,7 @@ impl From<Command> for CommandType {
             Command::DontAskToAsk => Self::DontAskToAsk,
             Command::NotValid(_) => Self::NotValid,
             Command::NotACommand => Self::NotACommand,
+            Command::Help(_) => Self::Help,
         }
     }
 }
