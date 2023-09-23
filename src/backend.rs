@@ -1,6 +1,8 @@
 use std::{error::Error, fmt::Display, str::FromStr};
 
-use serenity::{model::prelude::*, prelude::Context};
+use serenity::{model::prelude::*, prelude::*};
+
+use indoc::indoc;
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 556333985882439680;
@@ -18,6 +20,8 @@ pub enum Command {
     PrivateModMessage { message: String, user: String },
     /// Shows an XKCD link
     Xkcd(u32),
+    /// Sends, literally, https://dontasktoask.com/
+    DontAskToAsk,
     /// The command wasn't valid (for one reason or another)
     NotValid(String),
     /// The message wasn't a given command
@@ -90,6 +94,7 @@ impl Command {
                     user,
                 }
             }
+            "da2a" | "dontasktoask" => Command::DontAskToAsk,
             arg => Command::NotValid(format!("`{arg}` is not a valid command!")),
         }
     }
@@ -142,6 +147,55 @@ impl Error for TimeErr {}
 impl Display for TimeErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CommandType {
+    Ban,
+    Mute,
+    Notice,
+    PrivateModMessage,
+    Xkcd,
+    DontAskToAsk,
+    NotValid,
+    NotACommand
+}
+
+impl CommandType {
+    pub fn help_message(&self) -> String {
+        match self {
+            CommandType::Ban => indoc! {"
+                ```
+                {prefix}ban - Mod Only!
+                ================================
+                Bans a user from the server. Note that bans require, at least,
+                half or more of the mod team to agre to ban someone in most cases.
+                ```
+            "}.replace("{prefix}", PREFIX),
+            CommandType::Mute => todo!(),
+            CommandType::Notice => todo!(),
+            CommandType::PrivateModMessage => todo!(),
+            CommandType::Xkcd => todo!(),
+            CommandType::DontAskToAsk => todo!(),
+            CommandType::NotValid => todo!(),
+            CommandType::NotACommand => todo!(),
+        }
+    }
+}
+
+impl From<Command> for CommandType {
+    fn from(value: Command) -> Self {
+        match value {
+            Command::Ban(_) => Self::Ban,
+            Command::Mute(_, _) => Self::Mute,
+            Command::Notice(_) => Self::Notice,
+            Command::PrivateModMessage { .. } => Self::PrivateModMessage,
+            Command::Xkcd(_) => Self::Xkcd,
+            Command::DontAskToAsk => Self::DontAskToAsk,
+            Command::NotValid(_) => Self::NotValid,
+            Command::NotACommand => Self::NotACommand,
+        }
     }
 }
 
