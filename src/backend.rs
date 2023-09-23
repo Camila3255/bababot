@@ -80,9 +80,18 @@ impl Command {
                     .requires_mod(ctx, message)
                     .await
             }
-            CommandType::Notice => Command::Notice(vec_string_to_string(&args, Some(1))),
-            CommandType::PrivateModMessage => todo!(),
-            CommandType::Xkcd => Command::Xkcd(xkcd_from_string(&vec_string_to_string(&args, Some(1)))),
+            CommandType::Notice => {
+                Command::Notice(vec_string_to_string(&args, Some(1)))
+                    .requires_mod(ctx, message)
+                    .await
+            }
+            CommandType::PrivateModMessage => Command::PrivateModMessage {
+                message: vec_string_to_string(&args, Some(1)),
+                user: message.author.name.clone(),
+            },
+            CommandType::Xkcd => {
+                Command::Xkcd(xkcd_from_string(&vec_string_to_string(&args, Some(1))))
+            }
             CommandType::DontAskToAsk => Command::DontAskToAsk,
             CommandType::NotValid => Command::NotValid("Command was not valid!".to_owned()),
             CommandType::NotACommand => Command::NotACommand,
@@ -170,12 +179,28 @@ impl CommandType {
                 ```
                 {prefix}mute [user] [time] [reason] - Mod Only!
                 ================================
-                Mutes a user for a specified time
+                Mutes a user for a specified time.
+                This uses discord's 'Time Out' feature,
+                rather than
                 ```
             "}
             .replace("{prefix}", PREFIX),
-            CommandType::Notice => todo!(),
-            CommandType::PrivateModMessage => todo!(),
+            CommandType::Notice  => indoc! {"
+                ```
+                {prefix}notice [...message] - Mod Only!
+                ================================
+                Anonymously gives a broadcast to the channel.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::PrivateModMessage  => indoc! {"
+                ```
+                {prefix}pvm [...message]
+                ================================
+                Sends a one-time message to the mod channel.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
             CommandType::Xkcd => todo!(),
             CommandType::DontAskToAsk => todo!(),
             CommandType::NotValid => todo!(),
