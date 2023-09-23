@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display, str::FromStr};
+use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
 
 use serenity::{model::prelude::*, prelude::*};
 
@@ -12,8 +12,8 @@ pub const STAFF_ROLE: u64 = 564541527108616193;
 pub enum Command {
     /// Bans a user
     Ban(UserId),
-    /// Mutes a user for a specified time
-    Mute(UserId, Time),
+    /// Mutes a user for a specified time and reason
+    Mute(UserId, Time, String),
     /// Gives a mod notice to the current channel
     Notice(String),
     /// Gives a message privately to the staff bot channel
@@ -39,7 +39,7 @@ impl Command {
             self
         } else {
             match self {
-                Self::Ban(_) | Self::Mute(_, _) | Self::Notice(_) => {
+                Self::Ban(_) | Self::Mute(..) | Self::Notice(_) => {
                     Self::NotValid("User is not a registered moderator".to_owned())
                 }
                 this => this,
@@ -57,47 +57,36 @@ impl Command {
         if args.is_empty() {
             return Command::NotACommand;
         }
-        match args[0] {
-            "ban" => {
+        match args[0]
+            .strip_prefix(PREFIX)
+            .expect("fn returns early if message starts with prefix")
+            .parse::<CommandType>()
+            .expect("CommandType::from_str is infallible")
+        {
+            CommandType::Ban => {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
-                    return Command::NotValid("Could not parse User ID".to_owned());
+                    return Command::NotValid("Given user was not a valid UserID".to_owned());
                 };
                 Command::Ban(user_id).requires_mod(ctx, message).await
             }
-            "mute" => {
+            CommandType::Mute => {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
-                    return Command::NotValid("Could not parse User ID".to_owned());
+                    return Command::NotValid("Given user was not a valid UserID".to_owned());
                 };
                 let Ok(time) = Time::from_str(args[2]) else {
-                    return Command::NotValid("Could not parse time string".to_owned());
+                    return Command::NotValid("Given time was invalid!".to_owned());
                 };
-                Command::Mute(user_id, time)
+                Command::Mute(user_id, time, vec_string_to_string(&args, Some(3)))
                     .requires_mod(ctx, message)
                     .await
             }
-            "xkcd" => Command::Xkcd(args[1].parse().unwrap_or(378)),
-            "notice" => {
-                let notice = args
-                    .clone()
-                    .into_iter()
-                    .flat_map(|string| string.chars())
-                    .collect::<String>();
-                Command::Notice(notice).requires_mod(ctx, message).await
-            }
-            "mail" => {
-                let notice = args
-                    .clone()
-                    .into_iter()
-                    .flat_map(|string| string.chars())
-                    .collect::<String>();
-                let user = message.author.name.clone();
-                Command::PrivateModMessage {
-                    message: notice,
-                    user,
-                }
-            }
-            "da2a" | "dontasktoask" => Command::DontAskToAsk,
-            arg => Command::NotValid(format!("`{arg}` is not a valid command!")),
+            CommandType::Notice => Command::Notice(vec_string_to_string(&args, Some(1))),
+            CommandType::PrivateModMessage => todo!(),
+            CommandType::Xkcd => Command::Xkcd(xkcd_from_string(&vec_string_to_string(&args, Some(1)))),
+            CommandType::DontAskToAsk => Command::DontAskToAsk,
+            CommandType::NotValid => Command::NotValid("Command was not valid!".to_owned()),
+            CommandType::NotACommand => Command::NotACommand,
+            CommandType::Help => Command::Help(CommandType::from_str(args[1]).ok()),
         }
     }
     pub fn execute_command(self, _ctx: Context, _message: Message) {}
@@ -162,7 +151,7 @@ pub enum CommandType {
     DontAskToAsk,
     NotValid,
     NotACommand,
-    Help
+    Help,
 }
 
 impl CommandType {
@@ -170,13 +159,21 @@ impl CommandType {
         match self {
             CommandType::Ban => indoc! {"
                 ```
-                {prefix}ban - Mod Only!
+                {prefix}ban [user] - Mod Only!
                 ================================
                 Bans a user from the server. Note that bans require, at least,
-                half or more of the mod team to agre to ban someone in most cases.
+                half or more of the mod team to agree to ban someone in most cases.
                 ```
-            "}.replace("{prefix}", PREFIX),
-            CommandType::Mute => todo!(),
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::Mute => indoc! {"
+                ```
+                {prefix}mute [user] [time] [reason] - Mod Only!
+                ================================
+                Mutes a user for a specified time
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
             CommandType::Notice => todo!(),
             CommandType::PrivateModMessage => todo!(),
             CommandType::Xkcd => todo!(),
@@ -192,7 +189,7 @@ impl From<Command> for CommandType {
     fn from(value: Command) -> Self {
         match value {
             Command::Ban(_) => Self::Ban,
-            Command::Mute(_, _) => Self::Mute,
+            Command::Mute(..) => Self::Mute,
             Command::Notice(_) => Self::Notice,
             Command::PrivateModMessage { .. } => Self::PrivateModMessage,
             Command::Xkcd(_) => Self::Xkcd,
@@ -204,10 +201,56 @@ impl From<Command> for CommandType {
     }
 }
 
+impl FromStr for CommandType {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
+            "ban" => Self::Ban,
+            "mute" => Self::Mute,
+            "notice" => Self::Notice,
+            "private" | "pvm" => Self::PrivateModMessage,
+            "xkcd" => Self::Xkcd,
+            "dontasktoask" | "da2a" => Self::DontAskToAsk,
+            "help" => Self::Help,
+            _ => Self::NotValid,
+        })
+    }
+}
+
 async fn is_mod(ctx: &Context, message: &Message) -> bool {
     message
         .author
         .has_role(ctx.clone().http, BABACORD_ID, STAFF_ROLE)
         .await
         .unwrap_or(false)
+}
+
+pub fn xkcd_from_string(string: &str) -> u32 {
+    if let Ok(val) = string.parse() {
+        val
+    } else {
+        match string.to_lowercase().as_str() {
+            "tautology" | "tautological" | "honor society" => 703,
+            "python" | "import antigravity" | "antigravity" => 353,
+            "haskell" | "side effects" => 1312,
+            "trolley problem" => 1455,
+            "linux" | "OS" => 272,
+            _ => 404,
+        }
+    }
+}
+
+fn vec_string_to_string(vector: &Vec<&str>, idx: Option<usize>) -> String {
+    let vector = vector
+        .clone()
+        .into_iter()
+        .map(|x| x.to_owned())
+        .collect::<Vec<_>>();
+    if let Some(index) = idx {
+        let slice = &vector[index..];
+        slice.join(" ")
+    } else {
+        vector.join(" ")
+    }
 }
