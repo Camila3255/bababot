@@ -17,8 +17,8 @@ struct Bot;
 #[async_trait::async_trait]
 impl EventHandler for Bot {
     async fn message(&self, ctx: Context, message: Message) {
-        let command = Command::parse_from_message(&ctx, &message).await;
-        command.execute_command(ctx, message);
+        let shard = BotShard::new(&ctx, &message);
+        shard.execute_command().await;
     }
 }
 

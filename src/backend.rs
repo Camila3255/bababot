@@ -98,7 +98,7 @@ impl Command {
             CommandType::Help => Command::Help(CommandType::from_str(args[1]).ok()),
         }
     }
-    pub fn execute_command(self, _ctx: Context, _message: Message) {}
+    pub fn execute_command(self, _ctx: &Context, _message: &Message) {}
 }
 
 /// A representation of a time string (e.g. "2h30m")
@@ -250,6 +250,24 @@ impl FromStr for CommandType {
             _ => Self::NotValid,
         })
     }
+}
+
+/// represents a shard of a bot doing calculations for a single message.
+pub struct BotShard<'a> {
+    ctx: &'a Context,
+    message: &'a Message
+}
+
+impl<'a> BotShard<'a> {
+    pub fn new(ctx: &'a Context, message: &'a Message) -> Self {
+        Self { ctx, message }
+    }
+    pub async fn command(&self) -> Command {
+        Command::parse_from_message(self.ctx, self.message).await
+    }
+    pub async fn execute_command(&self) {
+        self.command().await.execute_command(self.ctx, self.message)
+    } 
 }
 
 async fn is_mod(ctx: &Context, message: &Message) -> bool {
