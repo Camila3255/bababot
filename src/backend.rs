@@ -289,7 +289,7 @@ impl<'a> BotShard<'a> {
         self.message.author.clone()
     }
     pub async fn user_request(&self, user_id: u64) -> SereneResult<Member> {
-        self.ctx.http.get_member(BABACORD_ID, user_id).await
+        self.http_server().get_member(BABACORD_ID, user_id).await
     }
     pub fn http_server(&self) -> &Http {
         &self.ctx.http
