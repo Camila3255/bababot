@@ -1,10 +1,12 @@
-use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
-
-use serenity::{model::prelude::*, prelude::*, client::bridge::gateway::ShardRunnerMessage};
-use tungstenite::protocol::Message as TungstenMessage;
 use eyre::Result;
-
 use indoc::indoc;
+use serenity::{
+    model::prelude::*, prelude::*,
+    http::Http,
+    Result as SereneResult
+};
+use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
+use serde_json::to_value;
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 556333985882439680;
@@ -103,9 +105,7 @@ impl Command {
             CommandType::Suggestion => Command::Suggestion(vec_string_to_string(&args, Some(1))),
         }
     }
-    pub fn execute_command(self, _shard: BotShard<'_>) {
-        
-    }
+    pub fn execute_command(self, _shard: BotShard<'_>) {}
 }
 
 /// A representation of a time string (e.g. "2h30m")
@@ -168,7 +168,7 @@ pub enum CommandType {
     NotValid,
     NotACommand,
     Help,
-    Suggestion
+    Suggestion,
 }
 
 impl CommandType {
@@ -268,9 +268,10 @@ impl FromStr for CommandType {
 #[derive(Clone, Copy)]
 pub struct BotShard<'a> {
     ctx: &'a Context,
-    message: &'a Message
+    message: &'a Message,
 }
 
+#[allow(dead_code)]
 impl<'a> BotShard<'a> {
     pub fn new(ctx: &'a Context, message: &'a Message) -> Self {
         Self { ctx, message }
@@ -281,10 +282,17 @@ impl<'a> BotShard<'a> {
     pub async fn execute_command(&self) {
         self.command().await.execute_command(*self)
     }
-    pub fn send_message(&self, message: String) -> Result<()> {
-        Ok(self.ctx.shard.send_to_shard(
-            ShardRunnerMessage::Message(TungstenMessage::Text(message))
-        )?)
+    pub async fn send_message(&self, message: String) -> Result<Message>  {
+        Ok(self.http_server().send_message(self.message.channel_id.into(), &to_value(message)?).await?)
+    }
+    pub fn author(&self) -> User {
+        self.message.author.clone()
+    }
+    pub async fn user_request(&self, user_id: u64) -> SereneResult<Member> {
+        self.ctx.http.get_member(BABACORD_ID, user_id).await
+    }
+    pub fn http_server(&self) -> &Http {
+        &self.ctx.http
     }
 }
 
