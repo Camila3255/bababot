@@ -1,6 +1,8 @@
 use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
 
-use serenity::{model::prelude::*, prelude::*};
+use serenity::{model::prelude::*, prelude::*, client::bridge::gateway::ShardRunnerMessage};
+use tungstenite::protocol::Message as TungstenMessage;
+use eyre::Result;
 
 use indoc::indoc;
 
@@ -24,6 +26,8 @@ pub enum Command {
     DontAskToAsk,
     /// Help Command
     Help(Option<CommandType>),
+    /// A suggestion for the bot
+    Suggestion(String),
     /// The command wasn't valid (for one reason or another)
     NotValid(String),
     /// The message wasn't a given command
@@ -96,9 +100,12 @@ impl Command {
             CommandType::NotValid => Command::NotValid("Command was not valid!".to_owned()),
             CommandType::NotACommand => Command::NotACommand,
             CommandType::Help => Command::Help(CommandType::from_str(args[1]).ok()),
+            CommandType::Suggestion => Command::Suggestion(vec_string_to_string(&args, Some(1))),
         }
     }
-    pub fn execute_command(self, _ctx: &Context, _message: &Message) {}
+    pub fn execute_command(self, _shard: BotShard<'_>) {
+        
+    }
 }
 
 /// A representation of a time string (e.g. "2h30m")
@@ -161,6 +168,7 @@ pub enum CommandType {
     NotValid,
     NotACommand,
     Help,
+    Suggestion
 }
 
 impl CommandType {
@@ -215,6 +223,7 @@ impl CommandType {
             CommandType::NotValid => todo!(),
             CommandType::NotACommand => todo!(),
             CommandType::Help => todo!(),
+            CommandType::Suggestion => todo!(),
         }
     }
 }
@@ -231,6 +240,7 @@ impl From<Command> for CommandType {
             Command::NotValid(_) => Self::NotValid,
             Command::NotACommand => Self::NotACommand,
             Command::Help(_) => Self::Help,
+            Command::Suggestion(_) => Self::Suggestion,
         }
     }
 }
@@ -252,7 +262,10 @@ impl FromStr for CommandType {
     }
 }
 
-/// represents a shard of a bot doing calculations for a single message.
+/// Represents a shard of a bot doing calculations for a single message.
+/// Has some helper methods for sending messages and interacting
+/// with the inner HTTP server.
+#[derive(Clone, Copy)]
 pub struct BotShard<'a> {
     ctx: &'a Context,
     message: &'a Message
@@ -266,8 +279,13 @@ impl<'a> BotShard<'a> {
         Command::parse_from_message(self.ctx, self.message).await
     }
     pub async fn execute_command(&self) {
-        self.command().await.execute_command(self.ctx, self.message)
-    } 
+        self.command().await.execute_command(*self)
+    }
+    pub fn send_message(&self, message: String) -> Result<()> {
+        Ok(self.ctx.shard.send_to_shard(
+            ShardRunnerMessage::Message(TungstenMessage::Text(message))
+        )?)
+    }
 }
 
 async fn is_mod(ctx: &Context, message: &Message) -> bool {
