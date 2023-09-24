@@ -164,6 +164,7 @@ pub enum CommandType {
 }
 
 impl CommandType {
+    #[allow(dead_code)]
     pub fn help_message(&self) -> String {
         match self {
             CommandType::Ban => indoc! {"
