@@ -275,10 +275,10 @@ pub fn xkcd_from_string(string: &str) -> u32 {
     }
 }
 
-fn vec_string_to_string(vector: &Vec<&str>, idx: Option<usize>) -> String {
+fn vec_string_to_string(vector: &[&str], idx: Option<usize>) -> String {
     let vector = vector
-        .clone()
-        .into_iter()
+        .iter()
+        .copied()
         .map(|x| x.to_owned())
         .collect::<Vec<_>>();
     if let Some(index) = idx {
