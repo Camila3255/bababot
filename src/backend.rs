@@ -185,7 +185,7 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
-            CommandType::Notice  => indoc! {"
+            CommandType::Notice => indoc! {"
                 ```
                 {prefix}notice [...message] - Mod Only!
                 ================================
@@ -193,7 +193,7 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
-            CommandType::PrivateModMessage  => indoc! {"
+            CommandType::PrivateModMessage => indoc! {"
                 ```
                 {prefix}pvm [...message]
                 ================================
@@ -201,7 +201,15 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
-            CommandType::Xkcd => todo!(),
+            CommandType::Xkcd => indoc! {"
+                ```
+                {prefix}xkcd [<index:number> OR <phrase:word(s)>]
+                ================================
+                Sends a pre-formatted XKCD link.
+                Some phrases have link mappings (e.g. 'tautology' maps to XKCD 703.)
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
             CommandType::DontAskToAsk => todo!(),
             CommandType::NotValid => todo!(),
             CommandType::NotACommand => todo!(),
