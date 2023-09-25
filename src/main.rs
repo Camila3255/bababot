@@ -1,9 +1,8 @@
 mod backend;
 
 use backend::*;
-
-use serenity::model::prelude::*;
-use serenity::prelude::*;
+use log::{error, info};
+use serenity::{model::prelude::*, prelude::*};
 
 #[tokio::main]
 async fn main() -> Result<(), SerenityError> {
@@ -19,11 +18,11 @@ impl EventHandler for Bot {
     async fn message(&self, ctx: Context, message: Message) {
         let shard = BotShard::new(&ctx, &message);
         match shard.execute_command().await {
-            Ok(message) => match shard.send_message(message).await {
-                Ok(_) => {},
-                Err(e) => todo!(),
+            Ok(message) => match shard.send_message(message.clone()).await {
+                Ok(_) => info!("Successfuly ran command: {message}"),
+                Err(e) => error!("Unable to send message: {e}"),
             },
-            Err(e) => todo!(),
+            Err(e) => error!("Unable to execute command: {e}"),
         }
     }
 }

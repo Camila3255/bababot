@@ -72,6 +72,7 @@ dependencies = [
  "async-trait",
  "eyre",
  "indoc",
+ "log",
  "serde_json",
  "serenity",
  "tokio",

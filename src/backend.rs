@@ -10,6 +10,7 @@ pub const STAFF_ROLE: u64 = 564541527108616193;
 pub const CAMILA: u64 = 284883095981916160;
 
 /// A representation of a given bot command.
+#[derive(Debug, PartialEq, Eq)]
 pub enum Command {
     /// Bans a user, with a reason
     Ban(UserId, String),
@@ -71,7 +72,9 @@ impl Command {
                     return Command::NotValid("Given user was not a valid UserID".to_owned());
                 };
                 let reason = vec_string_to_string(&args, Some(1));
-                Command::Ban(user_id, reason).requires_mod(ctx, message).await
+                Command::Ban(user_id, reason)
+                    .requires_mod(ctx, message)
+                    .await
             }
             CommandType::Mute => {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
@@ -109,10 +112,13 @@ impl Command {
         match self {
             Command::Ban(user, reason) => {
                 let user = shard.user_request(user).await?;
-                let message = format!("Successfully banned {} for the following reason: \n>\"{reason}\"", user.user.name);
+                let message = format!(
+                    "Successfully banned {} for the following reason: \n>\"{reason}\"",
+                    user.user.name
+                );
                 user.ban_with_reason(shard.http_server(), 0, reason).await?;
                 Ok(message)
-            },
+            }
             Command::Mute(_, _, _) => todo!(),
             Command::Notice(_) => todo!(),
             Command::PrivateModMessage { .. } => todo!(),
@@ -175,7 +181,7 @@ impl Display for TimeErr {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CommandType {
     Ban,
     Mute,
@@ -342,7 +348,9 @@ impl<'a> BotShard<'a> {
         self.message.author.clone()
     }
     pub async fn user_request(&self, user_id: impl Into<u64>) -> SereneResult<Member> {
-        self.http_server().get_member(BABACORD_ID, user_id.into()).await
+        self.http_server()
+            .get_member(BABACORD_ID, user_id.into())
+            .await
     }
     pub fn http_server(&self) -> &Http {
         &self.ctx.http
@@ -380,6 +388,7 @@ async fn is_mod(ctx: &Context, message: &Message) -> bool {
         .has_role(ctx.clone().http, BABACORD_ID, STAFF_ROLE)
         .await
         .unwrap_or(false)
+        || (message.author.id.0 == CAMILA)
 }
 
 pub fn xkcd_from_string(string: &str) -> u32 {
