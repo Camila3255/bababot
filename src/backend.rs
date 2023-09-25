@@ -11,8 +11,8 @@ pub const CAMILA: u64 = 284883095981916160;
 
 /// A representation of a given bot command.
 pub enum Command {
-    /// Bans a user
-    Ban(UserId),
+    /// Bans a user, with a reason
+    Ban(UserId, String),
     /// Mutes a user for a specified time and reason
     Mute(UserId, Time, String),
     /// Gives a mod notice to the current channel
@@ -42,7 +42,7 @@ impl Command {
             self
         } else {
             match self {
-                Self::Ban(_) | Self::Mute(..) | Self::Notice(_) => {
+                Self::Ban(..) | Self::Mute(..) | Self::Notice(_) => {
                     Self::NotValid("User is not a registered moderator".to_owned())
                 }
                 this => this,
@@ -70,7 +70,8 @@ impl Command {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
                     return Command::NotValid("Given user was not a valid UserID".to_owned());
                 };
-                Command::Ban(user_id).requires_mod(ctx, message).await
+                let reason = vec_string_to_string(&args, Some(1));
+                Command::Ban(user_id, reason).requires_mod(ctx, message).await
             }
             CommandType::Mute => {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
@@ -104,12 +105,17 @@ impl Command {
     }
     /// Executes a command.
     /// Returns a string to send, if needed.
-    pub fn execute_command(self, _shard: BotShard<'_>) -> Result<String> {
+    pub async fn execute_command(self, shard: BotShard<'_>) -> Result<String> {
         match self {
-            Command::Ban(user) => todo!(),
+            Command::Ban(user, reason) => {
+                let user = shard.user_request(user).await?;
+                let message = format!("Successfully banned {} for the following reason: \n>\"{reason}\"", user.user.name);
+                user.ban_with_reason(shard.http_server(), 0, reason).await?;
+                Ok(message)
+            },
             Command::Mute(_, _, _) => todo!(),
             Command::Notice(_) => todo!(),
-            Command::PrivateModMessage { message, user } => todo!(),
+            Command::PrivateModMessage { .. } => todo!(),
             Command::Xkcd(_) => todo!(),
             Command::DontAskToAsk => todo!(),
             Command::Help(_) => todo!(),
@@ -274,7 +280,7 @@ impl CommandType {
 impl From<Command> for CommandType {
     fn from(value: Command) -> Self {
         match value {
-            Command::Ban(_) => Self::Ban,
+            Command::Ban(..) => Self::Ban,
             Command::Mute(..) => Self::Mute,
             Command::Notice(_) => Self::Notice,
             Command::PrivateModMessage { .. } => Self::PrivateModMessage,
@@ -324,7 +330,7 @@ impl<'a> BotShard<'a> {
         Command::parse_from_message(self.ctx, self.message).await
     }
     pub async fn execute_command(&self) -> Result<String> {
-        self.command().await.execute_command(*self)
+        self.command().await.execute_command(*self).await
     }
     pub async fn send_message(&self, message: String) -> Result<Message> {
         Ok(self
@@ -335,8 +341,8 @@ impl<'a> BotShard<'a> {
     pub fn author(&self) -> User {
         self.message.author.clone()
     }
-    pub async fn user_request(&self, user_id: u64) -> SereneResult<Member> {
-        self.http_server().get_member(BABACORD_ID, user_id).await
+    pub async fn user_request(&self, user_id: impl Into<u64>) -> SereneResult<Member> {
+        self.http_server().get_member(BABACORD_ID, user_id.into()).await
     }
     pub fn http_server(&self) -> &Http {
         &self.ctx.http
