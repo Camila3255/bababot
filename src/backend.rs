@@ -1,12 +1,8 @@
 use eyre::Result;
 use indoc::indoc;
-use serenity::{
-    model::prelude::*, prelude::*,
-    http::Http,
-    Result as SereneResult
-};
-use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
 use serde_json::to_value;
+use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
+use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 556333985882439680;
@@ -219,11 +215,42 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
-            CommandType::DontAskToAsk => todo!(),
-            CommandType::NotValid => todo!(),
-            CommandType::NotACommand => todo!(),
-            CommandType::Help => todo!(),
-            CommandType::Suggestion => todo!(),
+            CommandType::DontAskToAsk => indoc! {"
+                ```
+                {prefix}da2a | {prefix}dontasktoask
+                ================================
+                Sends the link 'https://dontasktoask.com/', verbatim.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::NotValid => indoc! {"
+                ```
+                iNVALID COMMAND
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::NotACommand => indoc! {"
+                ```
+                INVALID COMMAND
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::Help => indoc! {"
+                ```
+                {prefix}help <command>
+                ================================
+                Hey, wait a minute...
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::Suggestion => indoc! {"
+                ```
+                {prefix}suggest [phrase:word(s)]
+                ================================
+                Sends a suggestion to be reviewed at a later date.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
         }
     }
 }
@@ -282,8 +309,11 @@ impl<'a> BotShard<'a> {
     pub async fn execute_command(&self) {
         self.command().await.execute_command(*self)
     }
-    pub async fn send_message(&self, message: String) -> Result<Message>  {
-        Ok(self.http_server().send_message(self.message.channel_id.into(), &to_value(message)?).await?)
+    pub async fn send_message(&self, message: String) -> Result<Message> {
+        Ok(self
+            .http_server()
+            .send_message(self.message.channel_id.into(), &to_value(message)?)
+            .await?)
     }
     pub fn author(&self) -> User {
         self.message.author.clone()
@@ -293,6 +323,31 @@ impl<'a> BotShard<'a> {
     }
     pub fn http_server(&self) -> &Http {
         &self.ctx.http
+    }
+    pub fn author_is_blacklisted(&self) -> Result<bool> {
+        let blacklist_file = std::fs::read_to_string("src\\blacklist.txt")?;
+        let blacklisted_ids = blacklist_file
+            .lines()
+            .map(|line| line.parse::<u64>())
+            .collect::<Result<Vec<u64>, _>>()?;
+        let author_id = self.author().id.0;
+        for id in blacklisted_ids {
+            if author_id == id {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    pub fn blacklist_author(&self) -> Result<()> {
+        let blacklist_file = std::fs::read_to_string("src\\blacklist.txt")?;
+        let mut blacklist = blacklist_file
+            .lines()
+            .map(|string| string.to_owned())
+            .collect::<Vec<_>>();
+        blacklist.push(format!("{}", self.author().id.0));
+        let new_blacklist = blacklist.join("\n");
+        std::fs::write("src\\blacklist.txt", new_blacklist)?;
+        Ok(())
     }
 }
 
