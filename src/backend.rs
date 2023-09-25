@@ -7,6 +7,7 @@ use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 556333985882439680;
 pub const STAFF_ROLE: u64 = 564541527108616193;
+pub const CAMILA: u64 = 284883095981916160;
 
 /// A representation of a given bot command.
 pub enum Command {
@@ -101,7 +102,22 @@ impl Command {
             CommandType::Suggestion => Command::Suggestion(vec_string_to_string(&args, Some(1))),
         }
     }
-    pub fn execute_command(self, _shard: BotShard<'_>) {}
+    /// Executes a command.
+    /// Returns a string to send, if needed.
+    pub fn execute_command(self, _shard: BotShard<'_>) -> Result<String> {
+        match self {
+            Command::Ban(user) => todo!(),
+            Command::Mute(_, _, _) => todo!(),
+            Command::Notice(_) => todo!(),
+            Command::PrivateModMessage { message, user } => todo!(),
+            Command::Xkcd(_) => todo!(),
+            Command::DontAskToAsk => todo!(),
+            Command::Help(_) => todo!(),
+            Command::Suggestion(_) => todo!(),
+            Command::NotValid(_) => todo!(),
+            Command::NotACommand => todo!(),
+        }
+    }
 }
 
 /// A representation of a time string (e.g. "2h30m")
@@ -284,6 +300,7 @@ impl FromStr for CommandType {
             "xkcd" => Self::Xkcd,
             "dontasktoask" | "da2a" => Self::DontAskToAsk,
             "help" => Self::Help,
+            "suggest" => Self::Suggestion,
             _ => Self::NotValid,
         })
     }
@@ -306,7 +323,7 @@ impl<'a> BotShard<'a> {
     pub async fn command(&self) -> Command {
         Command::parse_from_message(self.ctx, self.message).await
     }
-    pub async fn execute_command(&self) {
+    pub async fn execute_command(&self) -> Result<String> {
         self.command().await.execute_command(*self)
     }
     pub async fn send_message(&self, message: String) -> Result<Message> {

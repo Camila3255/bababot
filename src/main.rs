@@ -18,7 +18,13 @@ struct Bot;
 impl EventHandler for Bot {
     async fn message(&self, ctx: Context, message: Message) {
         let shard = BotShard::new(&ctx, &message);
-        shard.execute_command().await;
+        match shard.execute_command().await {
+            Ok(message) => match shard.send_message(message).await {
+                Ok(_) => {},
+                Err(e) => todo!(),
+            },
+            Err(e) => todo!(),
+        }
     }
 }
 
