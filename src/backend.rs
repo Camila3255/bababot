@@ -307,7 +307,7 @@ impl FromStr for CommandType {
         // remove the prefix and get the first argument
         let prefix = s
             .strip_prefix('-')
-            .and_then(|string| string.lines().next())
+            .and_then(|string| string.split(|chr| matches!(chr, ' ' | '\n')).next())
             .ok_or(())?;
         Ok(match prefix.to_lowercase().as_str() {
             "ban" => Self::Ban,
