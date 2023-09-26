@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.73"
+chrono = "0.4.31"
 eyre = "0.6.8"
 indoc = "2.0.4"
 log = "0.4.20"

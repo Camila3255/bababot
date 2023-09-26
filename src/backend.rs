@@ -1,8 +1,9 @@
+use chrono::Duration;
 use eyre::Result;
 use indoc::indoc;
 use serde_json::to_value;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
-use std::{error::Error, fmt::Display, str::FromStr};
+use std::{error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration};
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 556333985882439680;
@@ -111,7 +112,7 @@ impl Command {
     pub async fn execute_command(self, shard: BotShard<'_>) -> Result<String> {
         match self {
             Command::Ban(user, reason) => {
-                let user = shard.user_request(user).await?;
+                let user = shard.member_request(user).await?;
                 let message = format!(
                     "Successfully banned {} for the following reason: \n>\"{reason}\"",
                     user.user.name
@@ -139,6 +140,26 @@ pub struct Time {
     pub minutes: u8,
     pub hours: u8,
     pub days: u8,
+}
+
+impl TryFrom<Time> for Timestamp {
+    type Error = eyre::Report;
+    fn try_from(value: Time) -> Result<Self> {
+        let duration = {
+            let mut duration = StdDuration::default();
+            // seconds
+            duration += StdDuration::new(value.seconds.into(), 0);
+            // minutes
+            duration += StdDuration::new((value.minutes * 60).into(), 0);
+            // hours
+            duration += StdDuration::new((value.hours * 60 * 60).into(), 0);
+            // days
+            duration += StdDuration::new((value.days * 60 * 60 * 24).into(), 0);
+            Duration::from_std(duration)
+        }?;
+        let stamp = Timestamp::now().checked_add_signed(duration).unwrap();
+        Ok(stamp.into())
+    }
 }
 
 impl FromStr for Time {
@@ -343,47 +364,102 @@ impl<'a> BotShard<'a> {
     pub async fn execute_command(&self) -> Result<String> {
         self.command().await.execute_command(*self).await
     }
-    pub async fn send_message(&self, message: String) -> Result<Message> {
-        Ok(self
-            .http_server()
-            .send_message(self.message.channel_id.into(), &to_value(message)?)
-            .await?)
+    pub async fn send_message(&self, message: impl AsRef<str>) -> SereneResult<Message> {
+        let channel_id = self.original_message().channel_id.0;
+        self.http_server()
+            .get_channel(channel_id)
+            .await?
+            .private()
+            .ok_or_else(|| serenity::Error::Other("Couldn't find channel of original message"))?
+            .say(self.http_server(), message.as_ref()).await
     }
     pub fn author(&self) -> User {
         self.message.author.clone()
     }
-    pub async fn user_request(&self, user_id: impl Into<u64>) -> SereneResult<Member> {
+    pub async fn member_request(&self, user_id: impl Into<u64>) -> SereneResult<Member> {
         self.http_server()
             .get_member(BABACORD_ID, user_id.into())
             .await
     }
+    pub async fn user_request(&self, user_id: impl Into<u64>) -> SereneResult<User> {
+        self.http_server().get_user(user_id.into()).await
+    }
+    pub async fn channel_request(&self, channel_id: impl Into<u64>) -> SereneResult<Channel> {
+        self.http_server().get_channel(channel_id.into()).await
+    }
+    pub async fn server_request(&self, server_id: impl Into<u64>) -> SereneResult<PartialGuild> {
+        self.http_server().get_guild(server_id.into()).await
+    }
     pub fn http_server(&self) -> &Http {
         &self.ctx.http
     }
-    pub fn author_is_blacklisted(&self) -> Result<bool> {
+    pub fn context(&self) -> &Context {
+        self.ctx
+    }
+    pub fn original_message(&self) -> &Message {
+        self.message
+    }
+    pub fn user_is_blacklisted(&self, user_id: impl Into<u64>) -> Result<bool> {
         let blacklist_file = std::fs::read_to_string("src\\blacklist.txt")?;
         let blacklisted_ids = blacklist_file
             .lines()
             .map(|line| line.parse::<u64>())
             .collect::<Result<Vec<u64>, _>>()?;
-        let author_id = self.author().id.0;
+        let user = user_id.into();
         for id in blacklisted_ids {
-            if author_id == id {
+            if user == id {
                 return Ok(true);
             }
         }
         Ok(false)
     }
-    pub fn blacklist_author(&self) -> Result<()> {
+    pub async fn blacklist_user(&self, user_id: impl Into<u64>) -> Result<()> {
+        let user = self.user_request(user_id.into()).await?;
         let blacklist_file = std::fs::read_to_string("src\\blacklist.txt")?;
         let mut blacklist = blacklist_file
             .lines()
             .map(|string| string.to_owned())
             .collect::<Vec<_>>();
-        blacklist.push(format!("{}", self.author().id.0));
+        blacklist.push(format!("{}", user.id.0));
         let new_blacklist = blacklist.join("\n");
         std::fs::write("src\\blacklist.txt", new_blacklist)?;
         Ok(())
+    }
+    pub async fn ban_user(
+        &self,
+        user_id: impl Into<u64>,
+        reason: impl AsRef<str>,
+    ) -> SereneResult<()> {
+        self.member_request(user_id)
+            .await?
+            .ban_with_reason(self.http_server(), 0_u8, reason)
+            .await
+    }
+    pub async fn mute_user(
+        &self,
+        user_id: impl Into<u64>,
+        time: Time,
+        reason: impl AsRef<str>,
+    ) -> Result<Message> {
+        let time = time.try_into()?;
+        self.member_request(user_id)
+            .await?
+            .disable_communication_until_datetime(self.http_server(), time)
+            .await?;
+        Ok(self.send_message(reason).await?)
+    }
+    pub async fn message_user(
+        &self,
+        user_id: impl Into<u64>,
+        message: impl AsRef<str>,
+    ) -> SereneResult<Message> {
+        self.member_request(user_id)
+            .await?
+            .user
+            .create_dm_channel(self.http_server())
+            .await?
+            .say(self.http_server(), message.as_ref())
+            .await
     }
 }
 
