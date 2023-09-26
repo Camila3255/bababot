@@ -1,7 +1,6 @@
 use chrono::Duration;
 use eyre::Result;
 use indoc::indoc;
-use serde_json::to_value;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
 use std::{error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration};
 
@@ -39,8 +38,8 @@ impl Command {
     /// Tells a command that a moderator role is required.
     /// If the role is not present, the command is turned into [`Command::NotValid`],
     /// else the command is returned unchanged.
-    pub async fn requires_mod(self, ctx: &Context, message: &Message) -> Self {
-        if is_mod(ctx, message).await {
+    pub async fn requires_mod(self, shard: BotShard<'_>) -> Self {
+        if shard.user_is_mod(shard.author().id.0).await {
             self
         } else {
             match self {
@@ -51,11 +50,13 @@ impl Command {
             }
         }
     }
-    pub async fn parse_from_message(ctx: &Context, message: &Message) -> Self {
-        if !message.content.starts_with(PREFIX) {
+    /// Parses a command given a [`Context`] and a sent [`Message`].
+    pub async fn parse_from_message(shard: BotShard<'_>) -> Self {
+        if !shard.original_message().content.starts_with(PREFIX) {
             return Command::NotACommand;
         }
-        let args = message
+        let args = shard
+            .original_message()
             .content
             .split(|chr: char| chr.is_whitespace())
             .collect::<Vec<_>>();
@@ -73,9 +74,7 @@ impl Command {
                     return Command::NotValid("Given user was not a valid UserID".to_owned());
                 };
                 let reason = vec_string_to_string(&args, Some(1));
-                Command::Ban(user_id, reason)
-                    .requires_mod(ctx, message)
-                    .await
+                Command::Ban(user_id, reason).requires_mod(shard).await
             }
             CommandType::Mute => {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
@@ -85,17 +84,17 @@ impl Command {
                     return Command::NotValid("Given time was invalid!".to_owned());
                 };
                 Command::Mute(user_id, time, vec_string_to_string(&args, Some(3)))
-                    .requires_mod(ctx, message)
+                    .requires_mod(shard)
                     .await
             }
             CommandType::Notice => {
                 Command::Notice(vec_string_to_string(&args, Some(1)))
-                    .requires_mod(ctx, message)
+                    .requires_mod(shard)
                     .await
             }
             CommandType::PrivateModMessage => Command::PrivateModMessage {
                 message: vec_string_to_string(&args, Some(1)),
-                user: message.author.name.clone(),
+                user: shard.original_message().author.name.clone(),
             },
             CommandType::Xkcd => {
                 Command::Xkcd(xkcd_from_string(&vec_string_to_string(&args, Some(1))))
@@ -218,6 +217,8 @@ pub enum CommandType {
 
 impl CommandType {
     #[allow(dead_code)]
+    /// Returns the associated (and pre-formatted) help message
+    /// for a given [`Command`].
     pub fn help_message(&self) -> String {
         match self {
             CommandType::Ban => indoc! {"
@@ -355,50 +356,78 @@ pub struct BotShard<'a> {
 
 #[allow(dead_code)]
 impl<'a> BotShard<'a> {
+    /// Creates a new [`BotShard`] given a [`Context`] and sent [`Message`].
+    /// Sent messages (via `BotShard::send_message()`) are sent to
+    /// the same channel as the given [`Message`].
     pub fn new(ctx: &'a Context, message: &'a Message) -> Self {
         Self { ctx, message }
     }
+    /// Parses a command from the content of the given [`Message`].
     pub async fn command(&self) -> Command {
-        Command::parse_from_message(self.ctx, self.message).await
+        Command::parse_from_message(*self).await
     }
+    /// Executes the command from the given content of the internal [`Message`].
     pub async fn execute_command(&self) -> Result<String> {
         self.command().await.execute_command(*self).await
     }
+    /// Sends a message to the same channel the given [`Message`] was sent to.
+    /// Returns a [`Message`] representing the sent message.
     pub async fn send_message(&self, message: impl AsRef<str>) -> SereneResult<Message> {
         let channel_id = self.original_message().channel_id.0;
+        self.send_message_to(message, channel_id).await
+    }
+    /// Sends a message to a given channel based on an ID.
+    /// Returns the [`Message`] representing the sent message.
+    pub async fn send_message_to(
+        &self,
+        message: impl AsRef<str>,
+        channel_id: impl Into<u64>,
+    ) -> SereneResult<Message> {
         self.http_server()
-            .get_channel(channel_id)
+            .get_channel(channel_id.into())
             .await?
             .private()
             .ok_or_else(|| serenity::Error::Other("Couldn't find channel of original message"))?
-            .say(self.http_server(), message.as_ref()).await
+            .say(self.http_server(), message.as_ref())
+            .await
     }
+    /// Gets the author of the sent message.
+    /// Useful for checking certain conditions, such as if they're a moderator.
     pub fn author(&self) -> User {
         self.message.author.clone()
     }
+    /// Attempts to request a [`Member`] from the guild.
     pub async fn member_request(&self, user_id: impl Into<u64>) -> SereneResult<Member> {
         self.http_server()
             .get_member(BABACORD_ID, user_id.into())
             .await
     }
+    /// Attempts to request a [`User`] from the http server.
     pub async fn user_request(&self, user_id: impl Into<u64>) -> SereneResult<User> {
         self.http_server().get_user(user_id.into()).await
     }
+    /// Attempts to request a [`Channel`] from the guild.
     pub async fn channel_request(&self, channel_id: impl Into<u64>) -> SereneResult<Channel> {
         self.http_server().get_channel(channel_id.into()).await
     }
+    /// Attempts to request a [`PartialGuild`] (server) from the http server.
     pub async fn server_request(&self, server_id: impl Into<u64>) -> SereneResult<PartialGuild> {
         self.http_server().get_guild(server_id.into()).await
     }
+    /// A reference to the internal [`Http`] server.
     pub fn http_server(&self) -> &Http {
         &self.ctx.http
     }
+    /// A reference to the given [`Context`].
     pub fn context(&self) -> &Context {
         self.ctx
     }
+    /// A reference to the original [`Message`].
     pub fn original_message(&self) -> &Message {
         self.message
     }
+    /// Returns whether or not a user is blacklisted.
+    /// Propogated any errors associated with IO.
     pub fn user_is_blacklisted(&self, user_id: impl Into<u64>) -> Result<bool> {
         let blacklist_file = std::fs::read_to_string("src\\blacklist.txt")?;
         let blacklisted_ids = blacklist_file
@@ -413,6 +442,8 @@ impl<'a> BotShard<'a> {
         }
         Ok(false)
     }
+    /// Blacklists a user.
+    /// Propogates any errors associated with IO, or any [`serenity::Error`]s.
     pub async fn blacklist_user(&self, user_id: impl Into<u64>) -> Result<()> {
         let user = self.user_request(user_id.into()).await?;
         let blacklist_file = std::fs::read_to_string("src\\blacklist.txt")?;
@@ -425,6 +456,8 @@ impl<'a> BotShard<'a> {
         std::fs::write("src\\blacklist.txt", new_blacklist)?;
         Ok(())
     }
+    /// Bans a user with a reason.
+    /// Reasons have a limit of 512 [`char`]s.
     pub async fn ban_user(
         &self,
         user_id: impl Into<u64>,
@@ -435,6 +468,9 @@ impl<'a> BotShard<'a> {
             .ban_with_reason(self.http_server(), 0_u8, reason)
             .await
     }
+    /// Mutes a user for a specified [`Time`].
+    /// Returns any bubbled-up errors, or
+    /// a [`Message`]
     pub async fn mute_user(
         &self,
         user_id: impl Into<u64>,
@@ -448,6 +484,9 @@ impl<'a> BotShard<'a> {
             .await?;
         Ok(self.send_message(reason).await?)
     }
+    /// Sends a message to a user.
+    /// If successful, returns the associated [`Message`].
+    /// Bubbles up errors.
     pub async fn message_user(
         &self,
         user_id: impl Into<u64>,
@@ -461,15 +500,21 @@ impl<'a> BotShard<'a> {
             .say(self.http_server(), message.as_ref())
             .await
     }
-}
-
-async fn is_mod(ctx: &Context, message: &Message) -> bool {
-    message
-        .author
-        .has_role(ctx.clone().http, BABACORD_ID, STAFF_ROLE)
-        .await
-        .unwrap_or(false)
-        || (message.author.id.0 == CAMILA)
+    /// Returns whether a requested user is a mod.
+    /// Unlike other functions, errors fallback to returning `false`.
+    /// The dev always is considered a moderator.
+    pub async fn user_is_mod(&self, user_id: impl Into<u64>) -> bool {
+        match self.user_request(user_id).await {
+            Ok(user) => match user
+                .has_role(self.http_server(), BABACORD_ID, STAFF_ROLE)
+                .await
+            {
+                Ok(b) => b || (user.id.0 == CAMILA),
+                Err(_) => false,
+            },
+            Err(_) => false,
+        }
+    }
 }
 
 pub fn xkcd_from_string(string: &str) -> u32 {
