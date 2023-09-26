@@ -2,7 +2,7 @@ use eyre::Result;
 use indoc::indoc;
 use serde_json::to_value;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
-use std::{convert::Infallible, error::Error, fmt::Display, str::FromStr};
+use std::{error::Error, fmt::Display, str::FromStr};
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 556333985882439680;
@@ -301,10 +301,15 @@ impl From<Command> for CommandType {
 }
 
 impl FromStr for CommandType {
-    type Err = Infallible;
+    type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s.to_lowercase().as_str() {
+        // remove the prefix and get the first argument
+        let prefix = s
+            .strip_prefix('-')
+            .and_then(|string| string.lines().next())
+            .ok_or(())?;
+        Ok(match prefix.to_lowercase().as_str() {
             "ban" => Self::Ban,
             "mute" => Self::Mute,
             "notice" => Self::Notice,
