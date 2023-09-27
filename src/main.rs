@@ -17,20 +17,15 @@ struct Bot;
 impl EventHandler for Bot {
     async fn message(&self, ctx: Context, message: Message) {
         let shard = BotShard::new(&ctx, &message);
-        match shard.execute_command().await {
-            Err(e) => eprintln!("Unable to execute command: {e}"),
-            Ok(_) => println!("command ran successfully!"),
+        if let Err(e) = shard.execute_command().await {
+            eprintln!("Unable to execute command: {e}");
         }
     }
 }
 
 fn intents() -> GatewayIntents {
     use GatewayIntents as GI;
-    GI::DIRECT_MESSAGES
-        .union(GI::GUILD_MEMBERS)
-        .union(GI::GUILD_MESSAGES)
-        .union(GI::MESSAGE_CONTENT)
-        .union(GI::GUILD_BANS)
+    GI::all()
 }
 
 fn get_secret() -> String {

@@ -2,7 +2,10 @@ use chrono::Duration;
 use eyre::Result;
 use indoc::indoc;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
-use std::{error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration};
+use std::{
+    convert::Infallible, error::Error, fmt::Display, ops::Deref, str::FromStr,
+    time::Duration as StdDuration,
+};
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 1095892457771782277;
@@ -67,7 +70,7 @@ impl Command {
             .strip_prefix(PREFIX)
             .expect("fn returns early if message starts with prefix")
             .parse::<CommandType>()
-            .expect("CommandType::from_str is infallible")
+            .unwrap_or(CommandType::NotValid)
         {
             CommandType::Ban => {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
@@ -100,7 +103,7 @@ impl Command {
                 Command::Xkcd(xkcd_from_string(&vec_string_to_string(&args, Some(1))))
             }
             CommandType::DontAskToAsk => Command::DontAskToAsk,
-            CommandType::NotValid => Command::NotValid("Command was not valid!".to_owned()),
+            CommandType::NotValid => Command::NotValid("I couldn't parse the command!".to_owned()),
             CommandType::NotACommand => Command::NotACommand,
             CommandType::Help => Command::Help(CommandType::from_str(args[1]).ok()),
             CommandType::Suggestion => Command::Suggestion(vec_string_to_string(&args, Some(1))),
@@ -172,7 +175,14 @@ impl Command {
             Command::Suggestion(_) => {
                 shard.send_message("Suggestions are currently unimplemented at the moment.\nI reccomend pinging Camila for feedback.").await?;
             }
-            Command::NotValid(_) => todo!(),
+            Command::NotValid(reason) => {
+                shard
+                    .send_message(
+                        "Oops! That command was invalid for the following reason: \n> [REASON]"
+                            .replace("[REASON]", &reason),
+                    )
+                    .await?;
+            }
             Command::NotACommand => {}
         }
         Ok(())
@@ -372,14 +382,16 @@ impl From<Command> for CommandType {
 }
 
 impl FromStr for CommandType {
-    type Err = ();
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // remove the prefix and get the first argument
-        let prefix = s
+        let binding = s
             .strip_prefix('-')
-            .and_then(|string| string.split(|chr| matches!(chr, ' ' | '\n')).next())
-            .ok_or(())?;
+            .unwrap_or(s)
+            .split(|chr| matches!(chr, ' ' | '\n'))
+            .collect::<Vec<_>>();
+        let prefix = *binding.first().unwrap_or(&"");
         Ok(match prefix.to_lowercase().as_str() {
             "ban" => Self::Ban,
             "mute" => Self::Mute,
@@ -432,13 +444,16 @@ impl<'a> BotShard<'a> {
         message: impl AsRef<str>,
         channel_id: impl Into<u64>,
     ) -> SereneResult<Message> {
-        self.http_server()
-            .get_channel(channel_id.into())
-            .await?
-            .private()
-            .ok_or_else(|| serenity::Error::Other("Couldn't find channel of original message"))?
-            .say(self.http_server(), message.as_ref())
-            .await
+        let channel = self.http_server().get_channel(channel_id.into()).await?;
+        if let Some(channel) = channel.clone().guild() {
+            channel.say(self.http_server(), message.as_ref()).await
+        } else if let Some(channel) = channel.clone().private() {
+            channel.say(self.http_server(), message.as_ref()).await
+        } else if channel.category().is_some() {
+            return Err(SerenityError::Other("Got a category for some reason"));
+        } else {
+            return Err(SerenityError::Other("Not a channel"));
+        }
     }
     /// Gets the author of the sent message.
     /// Useful for checking certain conditions, such as if they're a moderator.
