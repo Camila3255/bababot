@@ -5,8 +5,8 @@ use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult
 use std::{error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration};
 
 const PREFIX: &str = "-";
-pub const BABACORD_ID: u64 = 556333985882439680;
-pub const STAFF_ROLE: u64 = 564541527108616193;
+pub const BABACORD_ID: u64 = 1095892457771782277;
+pub const STAFF_ROLE: u64 = 1095892509139402782;
 pub const CAMILA: u64 = 284883095981916160;
 
 /// A representation of a given bot command.
