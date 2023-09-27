@@ -26,7 +26,11 @@ impl EventHandler for Bot {
 
 fn intents() -> GatewayIntents {
     use GatewayIntents as GI;
-    GI::from_bits_truncate(1374389865540)
+    GI::DIRECT_MESSAGES
+        .union(GI::GUILD_MEMBERS)
+        .union(GI::GUILD_MESSAGES)
+        .union(GI::MESSAGE_CONTENT)
+        .union(GI::GUILD_BANS)
 }
 
 fn get_secret() -> String {
