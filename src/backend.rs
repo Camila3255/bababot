@@ -34,6 +34,8 @@ pub enum Command {
     NotValid(String),
     /// The message wasn't a given command
     NotACommand,
+    /// A developer command
+    Dev(String),
 }
 
 impl Command {
@@ -50,6 +52,13 @@ impl Command {
                 }
                 this => this,
             }
+        }
+    }
+    pub async fn requires_dev(self, shard: BotShard<'_>) -> Self {
+        if shard.author_id().await == CAMILA {
+            self
+        } else {
+            Self::NotValid("User is not the dev!".to_owned())
         }
     }
     /// Parses a command given a [`Context`] and a sent [`Message`].
@@ -106,6 +115,11 @@ impl Command {
             CommandType::NotACommand => Command::NotACommand,
             CommandType::Help => Command::Help(CommandType::from_str(args[1]).ok()),
             CommandType::Suggestion => Command::Suggestion(vec_string_to_string(&args, Some(1))),
+            CommandType::Dev => {
+                Command::Dev(vec_string_to_string(&args, Some(1)))
+                    .requires_dev(shard)
+                    .await
+            }
         }
     }
     /// Executes a command.
@@ -183,6 +197,13 @@ impl Command {
                     .await?;
             }
             Command::NotACommand => {}
+            Command::Dev(action) => match action.as_str() {
+                "stop" | "halt" => {
+                    let _ = shard.send_message("Shutting down...").await;
+                    std::process::abort();
+                }
+                _ => {}
+            },
         }
         Ok(())
     }
@@ -271,6 +292,7 @@ pub enum CommandType {
     NotACommand,
     Help,
     Suggestion,
+    Dev,
 }
 
 impl CommandType {
@@ -359,6 +381,14 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
+            CommandType::Dev => indoc! {"
+                ```
+                {prefix}dev [command] - Dev Only!
+                ================================
+                Can preform a variety of developer options.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
         }
     }
 }
@@ -376,6 +406,7 @@ impl From<Command> for CommandType {
             Command::NotACommand => Self::NotACommand,
             Command::Help(_) => Self::Help,
             Command::Suggestion(_) => Self::Suggestion,
+            Command::Dev(_) => Self::Dev,
         }
     }
 }
@@ -400,6 +431,7 @@ impl FromStr for CommandType {
             "dontasktoask" | "da2a" => Self::DontAskToAsk,
             "help" => Self::Help,
             "suggest" => Self::Suggestion,
+            "dev" => Self::Dev,
             _ => Self::NotValid,
         })
     }
