@@ -6,8 +6,8 @@ use serenity::{model::prelude::*, prelude::*};
 
 #[tokio::main]
 async fn main() -> Result<(), SerenityError> {
-    let client = Client::builder(get_secret(), intents()).event_handler(Bot);
-    client.await?;
+    let mut client = Client::builder(get_secret(), intents()).event_handler(Bot).await?;
+    client.start().await?;
     Ok(())
 }
 
