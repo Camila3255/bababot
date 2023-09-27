@@ -3,8 +3,7 @@ use eyre::Result;
 use indoc::indoc;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
 use std::{
-    convert::Infallible, error::Error, fmt::Display, ops::Deref, str::FromStr,
-    time::Duration as StdDuration,
+    convert::Infallible, error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration,
 };
 
 const PREFIX: &str = "-";
