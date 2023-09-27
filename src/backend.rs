@@ -116,7 +116,26 @@ impl Command {
                     "Successfully banned {} for the following reason: \n>\"{reason}\"",
                     user.user.name
                 );
-                user.ban_with_reason(shard.http_server(), 0, reason).await?;
+                user.ban_with_reason(shard.http_server(), 0, &reason)
+                    .await?;
+                shard.message_user(user.user.id.0, indoc! {"
+                    You were given a ban in the __Baba is You Discord Server__ for the following reason:
+                    > *[REASON]*
+                    If you think was done in error, you can DM the staff for appeal. 
+                    We recommend waiting at least a week for appeals!
+                    Note that a long time having been passed is not usually enough for an appeal.
+                    
+                    There is no chance for appeal if the ban was for the following reasons:
+                    ❌Being discriminatory in any form.
+                    ❌Breaking discord's ToS or sharing otherwise illegal content.
+                    ❌Pirating Baba is You or sharing other pirated media.
+                    ❌Promoting Cryptocurrencies, misinformation, or other unwarranted advertisements.
+                    
+                    There are cases where appeal is guaranteed:
+                    ✅If your account was compromised and banned for being so, and you have regained access to the account.
+                    ✅Having pirated Baba is You, but then purchasing it legitimately.
+                    ✅Being banned for being underage, but then being of a legal age to join in the user's country.
+                "}.replace("[REASON]", &reason)).await?;
                 Ok(message)
             }
             Command::Mute(_, _, _) => todo!(),
@@ -156,7 +175,9 @@ impl TryFrom<Time> for Timestamp {
             duration += StdDuration::new((value.days * 60 * 60 * 24).into(), 0);
             Duration::from_std(duration)
         }?;
-        let stamp = Timestamp::now().checked_add_signed(duration).unwrap();
+        let stamp = Timestamp::now()
+            .checked_add_signed(duration)
+            .ok_or_else(|| SerenityError::Other("Timestamp overflow"))?;
         Ok(stamp.into())
     }
 }
@@ -514,6 +535,9 @@ impl<'a> BotShard<'a> {
             },
             Err(_) => false,
         }
+    }
+    pub async fn author_id(&self) -> u64 {
+        self.author().id.0
     }
 }
 
