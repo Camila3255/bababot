@@ -18,11 +18,8 @@ impl EventHandler for Bot {
     async fn message(&self, ctx: Context, message: Message) {
         let shard = BotShard::new(&ctx, &message);
         match shard.execute_command().await {
-            Ok(message) => match shard.send_message(message.clone()).await {
-                Ok(_) => info!("Successfuly ran command: {message}"),
-                Err(e) => error!("Unable to send message: {e}"),
-            },
             Err(e) => error!("Unable to execute command: {e}"),
+            Ok(_) => info!("command ran successfully!"),
         }
     }
 }

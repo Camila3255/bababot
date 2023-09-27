@@ -108,12 +108,12 @@ impl Command {
     }
     /// Executes a command.
     /// Returns a string to send, if needed.
-    pub async fn execute_command(self, shard: BotShard<'_>) -> Result<String> {
+    pub async fn execute_command(self, shard: BotShard<'_>) -> Result<()> {
         match self {
             Command::Ban(user, reason) => {
                 let user = shard.member_request(user).await?;
                 let message = format!(
-                    "Successfully banned {} for the following reason: \n>\"{reason}\"",
+                    "Successfully banned {} for the following reason: \n>{reason}",
                     user.user.name
                 );
                 user.ban_with_reason(shard.http_server(), 0, &reason)
@@ -136,18 +136,44 @@ impl Command {
                     ✅Having pirated Baba is You, but then purchasing it legitimately.
                     ✅Being banned for being underage, but then being of a legal age to join in the user's country.
                 "}.replace("[REASON]", &reason)).await?;
-                Ok(message)
+                shard.send_message(message).await?;
             }
-            Command::Mute(_, _, _) => todo!(),
-            Command::Notice(_) => todo!(),
-            Command::PrivateModMessage { .. } => todo!(),
-            Command::Xkcd(_) => todo!(),
-            Command::DontAskToAsk => todo!(),
-            Command::Help(_) => todo!(),
-            Command::Suggestion(_) => todo!(),
+            Command::Mute(user_id, time, reason) => {
+                let message =
+                    format!("Successfully muted user for the following reason: \n>{reason}");
+                shard.mute_user(user_id, time, &reason).await?;
+                shard.message_user(user_id, indoc! {"
+                    You were given a mute in the __Baba is You Discord Server__ for the following reason:
+                    > *[REASON]*
+                "}.replace("[REASON]", &reason)).await?;
+                shard.send_message(message).await?;
+            }
+            Command::Notice(message) => {
+                shard.send_message(format!(
+                    "The following is an official announcement from the Baba is You staff team:\n> **{message}**"
+                )).await?;
+            }
+            Command::PrivateModMessage { .. } => {
+                shard.send_message("unimplemented! sorry").await?;
+            },
+            Command::Xkcd(id) => {
+                shard.send_message(format!("https://xkcd.com/{id}/")).await?;
+            },
+            Command::DontAskToAsk => {
+                shard.send_message("https://dontasktoask.com/").await?;
+            },
+            Command::Help(command) => {
+                if let Some(command) = command {
+                    shard.send_message(command.help_message()).await?;
+                }
+            },
+            Command::Suggestion(_) => {
+                shard.send_message("unimplemented! sorry").await?;
+            },
             Command::NotValid(_) => todo!(),
-            Command::NotACommand => todo!(),
+            Command::NotACommand => {},
         }
+        Ok(())
     }
 }
 
@@ -388,7 +414,7 @@ impl<'a> BotShard<'a> {
         Command::parse_from_message(*self).await
     }
     /// Executes the command from the given content of the internal [`Message`].
-    pub async fn execute_command(&self) -> Result<String> {
+    pub async fn execute_command(&self) -> Result<()> {
         self.command().await.execute_command(*self).await
     }
     /// Sends a message to the same channel the given [`Message`] was sent to.
