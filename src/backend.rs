@@ -154,24 +154,26 @@ impl Command {
                 )).await?;
             }
             Command::PrivateModMessage { .. } => {
-                shard.send_message("unimplemented! sorry").await?;
-            },
+                shard.send_message("One-Time private mod messages are unimplemented. For now, you can use the modmail system.").await?;
+            }
             Command::Xkcd(id) => {
-                shard.send_message(format!("https://xkcd.com/{id}/")).await?;
-            },
+                shard
+                    .send_message(format!("https://xkcd.com/{id}/"))
+                    .await?;
+            }
             Command::DontAskToAsk => {
                 shard.send_message("https://dontasktoask.com/").await?;
-            },
+            }
             Command::Help(command) => {
                 if let Some(command) = command {
                     shard.send_message(command.help_message()).await?;
                 }
-            },
+            }
             Command::Suggestion(_) => {
-                shard.send_message("unimplemented! sorry").await?;
-            },
+                shard.send_message("Suggestions are currently unimplemented at the moment.\nI reccomend pinging Camila for feedback.").await?;
+            }
             Command::NotValid(_) => todo!(),
-            Command::NotACommand => {},
+            Command::NotACommand => {}
         }
         Ok(())
     }
