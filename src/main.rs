@@ -17,6 +17,11 @@ struct Bot;
 impl EventHandler for Bot {
     async fn message(&self, ctx: Context, message: Message) {
         let shard = BotShard::new(&ctx, &message);
+        // keke override: if message starts with "i'm" or "i am",
+        // and user is opted in, change username
+        
+        // DM override: if message is sent to bot,
+        // send message to cami
         if let Err(e) = shard.execute_command().await {
             eprintln!("Unable to execute command: {e}");
         }

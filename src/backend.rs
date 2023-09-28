@@ -1,11 +1,11 @@
 use chrono::Duration;
 use eyre::Result;
 use indoc::indoc;
+use rand::random;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
 use std::{
     convert::Infallible, error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration,
 };
-use rand::random;
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 1095892457771782277;
@@ -40,7 +40,7 @@ pub enum Command {
     /// A single coin flip
     CoinFlip,
     /// A randomly generated integer from 0 to [the field]
-    RandomInt(u32)
+    RandomInt(u32),
 }
 
 impl Command {
@@ -140,9 +140,11 @@ impl Command {
                 if let Ok(int) = vec_string_to_string(&args, Some(1)).parse::<u32>() {
                     Command::RandomInt(int)
                 } else {
-                    Command::NotValid("Couldn't parse an integer from the given arguments!".to_owned())
+                    Command::NotValid(
+                        "Couldn't parse an integer from the given arguments!".to_owned(),
+                    )
                 }
-            },
+            }
         }
     }
     /// Executes a command.
@@ -208,9 +210,11 @@ impl Command {
                 if let Some(command) = command {
                     shard.send_message(command.help_message()).await?;
                 } else {
-                    shard.send_message(indoc!{"
+                    shard
+                        .send_message(indoc! {"
                         Availible Commands:
-                    "}).await?;
+                    "})
+                        .await?;
                 }
             }
             Command::Suggestion(suggestion) => {
@@ -243,12 +247,16 @@ impl Command {
                     true => "heads",
                     false => "tails",
                 };
-                shard.send_message(format!("The result of the coin flip was... ||{flip}!||")).await?;
-            },
+                shard
+                    .send_message(format!("The result of the coin flip was... ||{flip}!||"))
+                    .await?;
+            }
             Command::RandomInt(bound) => {
                 let int = (random::<f64>() * bound as f64) as u32;
-                shard.send_message(format!("Between 0 and {bound}, I choose... ||{int}!||")).await?;
-            },
+                shard
+                    .send_message(format!("Between 0 and {bound}, I choose... ||{int}!||"))
+                    .await?;
+            }
         }
         Ok(())
     }
@@ -339,7 +347,7 @@ pub enum CommandType {
     Suggestion,
     Dev,
     CoinFlip,
-    RandomInt
+    RandomInt,
 }
 
 impl CommandType {
@@ -444,7 +452,7 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
-            CommandType::RandomInt =>  indoc! {"
+            CommandType::RandomInt => indoc! {"
                 ```
                 {prefix}randint [max:number]
                 ================================
@@ -679,6 +687,60 @@ impl<'a> BotShard<'a> {
     }
     pub async fn author_id(&self) -> u64 {
         self.author().id.0
+    }
+    /// Checks if a user is opted in AND the message is kekeable:
+    /// starts with "i'm" or "i am"
+    pub async fn is_kekeable(&self) -> bool {
+        let opted_ins = include_str!("optin.txt")
+            .lines()
+            .map(|x| x.parse())
+            .collect::<Result<Vec<u64>, _>>();
+        let opted_ins = match opted_ins {
+            Ok(vals) => vals,
+            Err(_) => return false,
+        };
+        opted_ins.contains(&self.author_id().await)
+            && (self
+                .original_message()
+                .content
+                .to_lowercase()
+                .starts_with("i'm")
+                || self
+                    .original_message()
+                    .content
+                    .to_lowercase()
+                    .starts_with("i am"))
+    }
+    pub async fn keke_author(&self) -> SereneResult<Message> {
+        let potential_keke = self
+            .original_message()
+            .content
+            .strip_prefix("i'm")
+            .unwrap_or(&self.original_message().content)
+            .strip_prefix("i am")
+            .unwrap_or(&self.original_message().content);
+        if self.is_kekeable().await {
+            let name = self.author().name.clone();
+            if self.original_message().content.chars().count() <= 32 {
+                let member = self.member_request(self.author_id().await).await?;
+                member
+                    .edit(self.http_server(), |editmember| {
+                        editmember.nickname(potential_keke)
+                    })
+                    .await?;
+                self.send_message(format!(
+                    "{name} is `{potential_keke}`!\n\nWanna optout? use {PREFIX}keke!"
+                ))
+                .await
+            } else {
+                self.send_message(format!(
+                    "{name} is NOT `{potential_keke}`!\n\nWanna optout? use {PREFIX}keke!"
+                ))
+                .await
+            }
+        } else {
+            Err(SerenityError::Other("Not a KEKE, ignorable"))
+        }
     }
 }
 
