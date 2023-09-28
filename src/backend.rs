@@ -113,7 +113,17 @@ impl Command {
             CommandType::DontAskToAsk => Command::DontAskToAsk,
             CommandType::NotValid => Command::NotValid("I couldn't parse the command!".to_owned()),
             CommandType::NotACommand => Command::NotACommand,
-            CommandType::Help => Command::Help(CommandType::from_str(args[1]).ok()),
+            CommandType::Help => Command::Help({
+                if args.len() == 1 {
+                    None
+                } else {
+                    Some(
+                        vec_string_to_string(&args, Some(1))
+                            .parse()
+                            .expect("Parsing a command is infallible"),
+                    )
+                }
+            }),
             CommandType::Suggestion => Command::Suggestion(vec_string_to_string(&args, Some(1))),
             CommandType::Dev => {
                 Command::Dev(vec_string_to_string(&args, Some(1)))
@@ -184,6 +194,10 @@ impl Command {
             Command::Help(command) => {
                 if let Some(command) = command {
                     shard.send_message(command.help_message()).await?;
+                } else {
+                    shard.send_message(indoc!{"
+                        Availible Commands:
+                    "}).await?;
                 }
             }
             Command::Suggestion(suggestion) => {
