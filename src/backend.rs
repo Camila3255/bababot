@@ -161,6 +161,7 @@ impl Command {
                 shard.message_user(user_id, indoc! {"
                     You were given a mute in the __Baba is You Discord Server__ for the following reason:
                     > *[REASON]*
+                    If you beleive this to be in error, contact the staff team.
                 "}.replace("[REASON]", &reason)).await?;
                 shard.send_message(message).await?;
             }
@@ -185,8 +186,14 @@ impl Command {
                     shard.send_message(command.help_message()).await?;
                 }
             }
-            Command::Suggestion(_) => {
-                shard.send_message("Suggestions are currently unimplemented at the moment.\nI reccomend pinging Camila for feedback.").await?;
+            Command::Suggestion(suggestion) => {
+                shard
+                    .message_user(
+                        CAMILA,
+                        format!("Heads up Cami! Someone sent in a suggestion:\n> {suggestion}"),
+                    )
+                    .await?;
+                shard.send_message("Successfully sent suggestion off to Cami!\nIf this is an emergency, I'd reccomend pinging her.").await?;
             }
             Command::NotValid(reason) => {
                 shard
@@ -196,7 +203,7 @@ impl Command {
                     )
                     .await?;
             }
-            Command::NotACommand => {}
+            Command::NotACommand => { /*intentionally do nothing*/ }
             Command::Dev(action) => match action.as_str() {
                 "stop" | "halt" => {
                     let _ = shard.send_message("Shutting down...").await;
