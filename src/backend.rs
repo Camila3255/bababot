@@ -5,6 +5,7 @@ use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult
 use std::{
     convert::Infallible, error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration,
 };
+use rand::random;
 
 const PREFIX: &str = "-";
 pub const BABACORD_ID: u64 = 1095892457771782277;
@@ -36,6 +37,10 @@ pub enum Command {
     NotACommand,
     /// A developer command
     Dev(String),
+    /// A single coin flip
+    CoinFlip,
+    /// A randomly generated integer from 0 to [the field]
+    RandomInt(u32)
 }
 
 impl Command {
@@ -130,6 +135,14 @@ impl Command {
                     .requires_dev(shard)
                     .await
             }
+            CommandType::CoinFlip => Command::CoinFlip,
+            CommandType::RandomInt => {
+                if let Ok(int) = vec_string_to_string(&args, Some(1)).parse::<u32>() {
+                    Command::RandomInt(int)
+                } else {
+                    Command::NotValid("Couldn't parse an integer from the given arguments!".to_owned())
+                }
+            },
         }
     }
     /// Executes a command.
@@ -225,6 +238,17 @@ impl Command {
                 }
                 _ => {}
             },
+            Command::CoinFlip => {
+                let flip = match random::<bool>() {
+                    true => "heads",
+                    false => "tails",
+                };
+                shard.send_message(format!("The result of the coin flip was... ||{flip}!||")).await?;
+            },
+            Command::RandomInt(bound) => {
+                let int = (random::<f64>() * bound as f64) as u32;
+                shard.send_message(format!("Between 0 and {bound}, I choose... ||{int}!||")).await?;
+            },
         }
         Ok(())
     }
@@ -314,6 +338,8 @@ pub enum CommandType {
     Help,
     Suggestion,
     Dev,
+    CoinFlip,
+    RandomInt
 }
 
 impl CommandType {
@@ -410,6 +436,22 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
+            CommandType::CoinFlip => indoc! {"
+                ```
+                {prefix}coinflip
+                ================================
+                50/50 chance to return Heads or Tails.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::RandomInt =>  indoc! {"
+                ```
+                {prefix}randint [max:number]
+                ================================
+                Returns a random number between 0 and max, inclusive of both.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
         }
     }
 }
@@ -428,6 +470,8 @@ impl From<Command> for CommandType {
             Command::Help(_) => Self::Help,
             Command::Suggestion(_) => Self::Suggestion,
             Command::Dev(_) => Self::Dev,
+            Command::CoinFlip => Self::CoinFlip,
+            Command::RandomInt(_) => Self::RandomInt,
         }
     }
 }
@@ -453,6 +497,8 @@ impl FromStr for CommandType {
             "help" => Self::Help,
             "suggest" => Self::Suggestion,
             "dev" => Self::Dev,
+            "coinflip" | "flip" => Self::CoinFlip,
+            "randint" | "rand" => Self::RandomInt,
             _ => Self::NotValid,
         })
     }

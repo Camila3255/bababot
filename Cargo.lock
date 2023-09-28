@@ -73,6 +73,7 @@ dependencies = [
  "chrono",
  "eyre",
  "indoc",
+ "rand",
  "serde_json",
  "serenity",
  "tokio",
