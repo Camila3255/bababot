@@ -4,7 +4,8 @@ use indoc::indoc;
 use rand::random;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
 use std::{
-    convert::Infallible, error::Error, fmt::Display, str::FromStr, time::Duration as StdDuration,
+    convert::Infallible, error::Error, fmt::Display, fs as files, str::FromStr,
+    time::Duration as StdDuration,
 };
 
 const PREFIX: &str = "-";
@@ -41,6 +42,10 @@ pub enum Command {
     CoinFlip,
     /// A randomly generated integer from 0 to [the field]
     RandomInt(u32),
+    /// Opt into getting keke'd
+    Optin,
+    /// Opt out of get keke'd
+    Optout,
 }
 
 impl Command {
@@ -89,7 +94,7 @@ impl Command {
                 let Ok(user_id) = UserId::from_str(args[1]) else {
                     return Command::NotValid("Given user was not a valid UserID".to_owned());
                 };
-                let reason = vec_string_to_string(&args, Some(1));
+                let reason = vec_str_to_string(&args, Some(1));
                 Command::Ban(user_id, reason).requires_mod(shard).await
             }
             CommandType::Mute => {
@@ -99,21 +104,21 @@ impl Command {
                 let Ok(time) = Time::from_str(args[2]) else {
                     return Command::NotValid("Given time was invalid!".to_owned());
                 };
-                Command::Mute(user_id, time, vec_string_to_string(&args, Some(3)))
+                Command::Mute(user_id, time, vec_str_to_string(&args, Some(3)))
                     .requires_mod(shard)
                     .await
             }
             CommandType::Notice => {
-                Command::Notice(vec_string_to_string(&args, Some(1)))
+                Command::Notice(vec_str_to_string(&args, Some(1)))
                     .requires_mod(shard)
                     .await
             }
             CommandType::PrivateModMessage => Command::PrivateModMessage {
-                message: vec_string_to_string(&args, Some(1)),
+                message: vec_str_to_string(&args, Some(1)),
                 user: shard.original_message().author.name.clone(),
             },
             CommandType::Xkcd => {
-                Command::Xkcd(xkcd_from_string(&vec_string_to_string(&args, Some(1))))
+                Command::Xkcd(xkcd_from_string(&vec_str_to_string(&args, Some(1))))
             }
             CommandType::DontAskToAsk => Command::DontAskToAsk,
             CommandType::NotValid => Command::NotValid("I couldn't parse the command!".to_owned()),
@@ -123,21 +128,21 @@ impl Command {
                     None
                 } else {
                     Some(
-                        vec_string_to_string(&args, Some(1))
+                        vec_str_to_string(&args, Some(1))
                             .parse()
                             .expect("Parsing a command is infallible"),
                     )
                 }
             }),
-            CommandType::Suggestion => Command::Suggestion(vec_string_to_string(&args, Some(1))),
+            CommandType::Suggestion => Command::Suggestion(vec_str_to_string(&args, Some(1))),
             CommandType::Dev => {
-                Command::Dev(vec_string_to_string(&args, Some(1)))
+                Command::Dev(vec_str_to_string(&args, Some(1)))
                     .requires_dev(shard)
                     .await
             }
             CommandType::CoinFlip => Command::CoinFlip,
             CommandType::RandomInt => {
-                if let Ok(int) = vec_string_to_string(&args, Some(1)).parse::<u32>() {
+                if let Ok(int) = vec_str_to_string(&args, Some(1)).parse::<u32>() {
                     Command::RandomInt(int)
                 } else {
                     Command::NotValid(
@@ -145,6 +150,8 @@ impl Command {
                     )
                 }
             }
+            CommandType::Optin => Command::Optin,
+            CommandType::Optout => Command::Optout,
         }
     }
     /// Executes a command.
@@ -257,6 +264,8 @@ impl Command {
                     .send_message(format!("Between 0 and {bound}, I choose... ||{int}!||"))
                     .await?;
             }
+            Command::Optin => opt_in_user(shard.author())?,
+            Command::Optout => opt_out_user(shard.author())?,
         }
         Ok(())
     }
@@ -348,6 +357,8 @@ pub enum CommandType {
     Dev,
     CoinFlip,
     RandomInt,
+    Optin,
+    Optout,
 }
 
 impl CommandType {
@@ -460,6 +471,23 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
+            CommandType::Optin => indoc! {"
+                ```
+                {prefix}optin
+                ================================
+                Allows you to get keke'd.
+                Specifically, your name can be changed by saying 'I'm ___' or a similar phrase.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
+            CommandType::Optout => indoc! {"
+                ```
+                {prefix}optout
+                ================================
+                Opts out of getting keke'd.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
         }
     }
 }
@@ -480,6 +508,8 @@ impl From<Command> for CommandType {
             Command::Dev(_) => Self::Dev,
             Command::CoinFlip => Self::CoinFlip,
             Command::RandomInt(_) => Self::RandomInt,
+            Command::Optin => Self::Optin,
+            Command::Optout => Self::Optout,
         }
     }
 }
@@ -507,6 +537,8 @@ impl FromStr for CommandType {
             "dev" => Self::Dev,
             "coinflip" | "flip" => Self::CoinFlip,
             "randint" | "rand" => Self::RandomInt,
+            "optin" => Self::Optin,
+            "optout" => Self::Optout,
             _ => Self::NotValid,
         })
     }
@@ -704,20 +736,20 @@ impl<'a> BotShard<'a> {
                 .original_message()
                 .content
                 .to_lowercase()
-                .starts_with("i'm")
+                .starts_with("i'm ")
                 || self
                     .original_message()
                     .content
                     .to_lowercase()
-                    .starts_with("i am"))
+                    .starts_with("i am "))
     }
     pub async fn keke_author(&self) -> SereneResult<Message> {
         let potential_keke = self
             .original_message()
             .content
-            .strip_prefix("i'm")
+            .strip_prefix("i'm ")
             .unwrap_or(&self.original_message().content)
-            .strip_prefix("i am")
+            .strip_prefix("i am ")
             .unwrap_or(&self.original_message().content);
         if self.is_kekeable().await {
             let name = self.author().name.clone();
@@ -742,6 +774,18 @@ impl<'a> BotShard<'a> {
             Err(SerenityError::Other("Not a KEKE, ignorable"))
         }
     }
+    pub fn message_origin(&self) -> MessageOrigin {
+        if self.original_message().is_private() {
+            MessageOrigin::PrivateChannel
+        } else {
+            MessageOrigin::PublicChannel
+        }
+    }
+}
+
+pub enum MessageOrigin {
+    PublicChannel,
+    PrivateChannel,
 }
 
 pub fn xkcd_from_string(string: &str) -> u32 {
@@ -759,7 +803,7 @@ pub fn xkcd_from_string(string: &str) -> u32 {
     }
 }
 
-fn vec_string_to_string(vector: &[&str], idx: Option<usize>) -> String {
+fn vec_str_to_string(vector: &[&str], idx: Option<usize>) -> String {
     let vector = vector
         .iter()
         .copied()
@@ -771,4 +815,36 @@ fn vec_string_to_string(vector: &[&str], idx: Option<usize>) -> String {
     } else {
         vector.join(" ")
     }
+}
+
+fn vec_string_to_string(vector: &[String], idx: Option<usize>) -> String {
+    let vector = vector.to_vec();
+    if let Some(index) = idx {
+        let slice = &vector[index..];
+        slice.join(" ")
+    } else {
+        vector.join(" ")
+    }
+}
+
+fn opt_in_user(user: User) -> Result<(), std::io::Error> {
+    let mut file = files::read_to_string("optin.txt")?
+        .lines()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if !file.contains(&format!("{}", user.id.0)) {
+        file.push(format!("{}", user.id.0));
+    }
+    files::write("optin.txt", vec_string_to_string(&file, None))
+}
+
+fn opt_out_user(user: User) -> Result<(), std::io::Error> {
+    let mut file = files::read_to_string("optin.txt")?
+        .lines()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if file.contains(&format!("{}", user.id.0)) {
+        file.retain(|item| item != &format!("{}", user.id.0));
+    }
+    files::write("optin.txt", vec_string_to_string(&file, None))
 }

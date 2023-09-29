@@ -19,9 +19,16 @@ impl EventHandler for Bot {
         let shard = BotShard::new(&ctx, &message);
         // keke override: if message starts with "i'm" or "i am",
         // and user is opted in, change username
-        
+        if shard.is_kekeable().await {
+            let _ = shard.keke_author().await;
+        }
         // DM override: if message is sent to bot,
         // send message to cami
+        if let MessageOrigin::PrivateChannel = shard.message_origin() {
+            if let Err(e) = shard.message_user(CAMILA, &message.content).await {
+                eprintln!("Unable to send message: {e}");
+            }
+        }
         if let Err(e) = shard.execute_command().await {
             eprintln!("Unable to execute command: {e}");
         }
