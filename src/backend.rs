@@ -46,6 +46,8 @@ pub enum Command {
     Optin,
     /// Opt out of get keke'd
     Optout,
+    /// Sends a link to the original "get keke'd" video
+    Keke,
 }
 
 impl Command {
@@ -152,6 +154,7 @@ impl Command {
             }
             CommandType::Optin => Command::Optin,
             CommandType::Optout => Command::Optout,
+            CommandType::Keke => Command::Keke,
         }
     }
     /// Executes a command.
@@ -266,6 +269,9 @@ impl Command {
             }
             Command::Optin => opt_in_user(shard.author())?,
             Command::Optout => opt_out_user(shard.author())?,
+            Command::Keke => {
+                shard.send_message("https://cdn.discordapp.com/attachments/563196186912096256/799820975666888764/SPOILER_Untitled_28_1080p.mp4").await?;
+            }
         }
         Ok(())
     }
@@ -359,6 +365,7 @@ pub enum CommandType {
     RandomInt,
     Optin,
     Optout,
+    Keke,
 }
 
 impl CommandType {
@@ -488,6 +495,14 @@ impl CommandType {
                 ```
             "}
             .replace("{prefix}", PREFIX),
+            CommandType::Keke => indoc! {"
+                ```
+                {prefix}keke
+                ================================
+                Sends the original 'lmao get keke'd' video.
+                ```
+            "}
+            .replace("{prefix}", PREFIX),
         }
     }
 }
@@ -510,6 +525,7 @@ impl From<Command> for CommandType {
             Command::RandomInt(_) => Self::RandomInt,
             Command::Optin => Self::Optin,
             Command::Optout => Self::Optout,
+            Command::Keke => Self::Keke,
         }
     }
 }
@@ -539,6 +555,7 @@ impl FromStr for CommandType {
             "randint" | "rand" => Self::RandomInt,
             "optin" => Self::Optin,
             "optout" => Self::Optout,
+            "keke" => Self::Keke,
             _ => Self::NotValid,
         })
     }
@@ -803,7 +820,7 @@ pub fn xkcd_from_string(string: &str) -> u32 {
     }
 }
 
-fn vec_str_to_string(vector: &[&str], idx: Option<usize>) -> String {
+pub fn vec_str_to_string(vector: &[&str], idx: Option<usize>) -> String {
     let vector = vector
         .iter()
         .copied()
@@ -817,7 +834,7 @@ fn vec_str_to_string(vector: &[&str], idx: Option<usize>) -> String {
     }
 }
 
-fn vec_string_to_string(vector: &[String], idx: Option<usize>) -> String {
+pub fn vec_string_to_string(vector: &[String], idx: Option<usize>) -> String {
     let vector = vector.to_vec();
     if let Some(index) = idx {
         let slice = &vector[index..];
