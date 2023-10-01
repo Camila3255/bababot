@@ -1,4 +1,4 @@
-use crate::backend::{BotShard, PREFIX};
+use crate::backend::{vec_str_to_string, BotShard, PREFIX};
 use eyre::Result;
 use serenity::Error as SereneError;
 use std::{
@@ -11,7 +11,7 @@ use std::{
 };
 /// Represents an action pertaining to a Case File.
 #[derive(Clone, PartialEq, Eq)]
-pub enum CasefileAction {
+pub enum CaseFileAction {
     /// Creates a new casefile
     Create,
     /// Reads all of a casefile into chat as a summary.
@@ -34,15 +34,15 @@ pub enum CasefileAction {
     ViewAll,
 }
 
-impl CasefileAction {
+impl CaseFileAction {
     pub fn id(&self) -> Option<u64> {
         match self {
-            CasefileAction::Create => None,
-            CasefileAction::Read { id } => Some(*id),
-            CasefileAction::AddItem { id, .. } => Some(*id),
-            CasefileAction::RemoveItem { id, .. } => Some(*id),
-            CasefileAction::Delete { id } => Some(*id),
-            CasefileAction::ViewAll => None,
+            CaseFileAction::Create => None,
+            CaseFileAction::Read { id } => Some(*id),
+            CaseFileAction::AddItem { id, .. } => Some(*id),
+            CaseFileAction::RemoveItem { id, .. } => Some(*id),
+            CaseFileAction::Delete { id } => Some(*id),
+            CaseFileAction::ViewAll => None,
         }
     }
     pub fn file_exists(&self) -> Result<bool> {
@@ -77,15 +77,15 @@ impl CasefileAction {
     }
     pub fn is_actionable(&self) -> Result<bool> {
         Ok(match self {
-            CasefileAction::Create => !self.file_exists()?,
-            CasefileAction::Read { .. }
-            | CasefileAction::AddItem { .. }
-            | CasefileAction::RemoveItem { .. }
-            | CasefileAction::Delete { .. } => self.file_exists()?,
-            CasefileAction::ViewAll => true,
+            CaseFileAction::Create => !self.file_exists()?,
+            CaseFileAction::Read { .. }
+            | CaseFileAction::AddItem { .. }
+            | CaseFileAction::RemoveItem { .. }
+            | CaseFileAction::Delete { .. } => self.file_exists()?,
+            CaseFileAction::ViewAll => true,
         })
     }
-    pub fn lowest_id_availible() -> Result<u32> {
+    pub fn lowest_id_availible() -> Result<u32, CaseFileError> {
         let ids = files::read_dir("casefiles")?
             .flat_map(|file| file.ok())
             .flat_map(|file| file.file_name().into_string().ok())
@@ -102,12 +102,12 @@ impl CasefileAction {
     pub async fn execute(self, shard: BotShard<'_>) -> Result<()> {
         if self.is_actionable()? {
             match self {
-                CasefileAction::Create { .. } => todo!(),
-                CasefileAction::Read { .. } => todo!(),
-                CasefileAction::AddItem { .. } => todo!(),
-                CasefileAction::RemoveItem { .. } => todo!(),
-                CasefileAction::Delete { .. } => todo!(),
-                CasefileAction::ViewAll => todo!(),
+                CaseFileAction::Create { .. } => todo!(),
+                CaseFileAction::Read { .. } => todo!(),
+                CaseFileAction::AddItem { .. } => todo!(),
+                CaseFileAction::RemoveItem { .. } => todo!(),
+                CaseFileAction::Delete { .. } => todo!(),
+                CaseFileAction::ViewAll => todo!(),
             }
         } else {
             shard
@@ -118,7 +118,7 @@ impl CasefileAction {
     }
 }
 
-impl FromStr for CasefileAction {
+impl FromStr for CaseFileAction {
     type Err = CaseFileError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -132,14 +132,52 @@ impl FromStr for CasefileAction {
                 "No valid action to take!".to_owned(),
             ))
         } else {
-            match args[1] {
-                "create" => todo!(),
-                "read" => todo!(),
-                "add" => todo!(),
-                "remove" => todo!(),
-                "view" => todo!(),
-                _ => Err(CaseFileError::ParsingError(format!("{PREFIX}{}", args[1]))),
-            }
+            Ok(match args[1] {
+                "create" => CaseFileAction::Create,
+                "read" => CaseFileAction::Read {
+                    id: {
+                        if args.len() < 3 {
+                            return Err(CaseFileError::ParsingError(
+                                "no given index to read from".to_owned(),
+                            ));
+                        } else {
+                            args[2].parse()?
+                        }
+                    },
+                },
+                "add" => CaseFileAction::AddItem {
+                    id: {
+                        if args.len() < 3 {
+                            return Err(CaseFileError::ParsingError(
+                                "no given index to add to".to_owned(),
+                            ));
+                        } else {
+                            args[2].parse()?
+                        }
+                    },
+                    item: if args.len() < 4 {
+                        return Err(CaseFileError::ParsingError("no item to add".to_owned()));
+                    } else {
+                        vec_str_to_string(&args, Some(3))
+                    },
+                },
+                "remove" => CaseFileAction::RemoveItem {
+                    id: if args.len() < 3 {
+                        return Err(CaseFileError::ParsingError(
+                            "no given index to read from".to_owned(),
+                        ));
+                    } else {
+                        args[2].parse()?
+                    },
+                    index: if args.len() < 3 {
+                        None
+                    } else {
+                        Some(vec_str_to_string(&args, Some(2)).parse()?)
+                    },
+                },
+                "view" => CaseFileAction::ViewAll,
+                _ => return Err(CaseFileError::ParsingError(format!("{PREFIX}{}", args[1]))),
+            })
         }
     }
 }

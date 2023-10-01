@@ -270,7 +270,9 @@ impl Command {
             Command::Optin => opt_in_user(shard.author())?,
             Command::Optout => opt_out_user(shard.author())?,
             Command::Keke => {
-                shard.send_message("https://cdn.discordapp.com/attachments/563196186912096256/799820975666888764/SPOILER_Untitled_28_1080p.mp4").await?;
+                shard.send_message(
+                    "https://cdn.discordapp.com/attachments/563196186912096256/799820975666888764/SPOILER_Untitled_28_1080p.mp4"
+                ).await?;
             }
         }
         Ok(())
