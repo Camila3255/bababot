@@ -1,4 +1,5 @@
 mod backend;
+pub mod casefile;
 
 use backend::*;
 use serenity::{model::prelude::*, prelude::*};
