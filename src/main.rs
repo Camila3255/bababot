@@ -1,15 +1,17 @@
-mod backend;
+pub mod backend;
 pub mod casefile;
 
 use backend::*;
+use eyre::Result;
 use serenity::{model::prelude::*, prelude::*};
 
 #[tokio::main]
-async fn main() -> Result<(), SerenityError> {
+async fn main() -> Result<()> {
     let mut client = Client::builder(get_secret(), intents())
         .event_handler(Bot)
         .await?;
-    client.start().await
+    client.start().await?;
+    Ok(())
 }
 
 struct Bot;
