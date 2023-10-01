@@ -123,7 +123,7 @@ impl FromStr for CaseFileAction {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let args = s.split(|chr| chr == ' ' || chr == '\n').collect::<Vec<_>>();
-        if args.is_empty() || args[0] != "casefuile" || args[0] != "cf" {
+        if args.is_empty() || args[0] != "casefuile" {
             Err(CaseFileError::ParsingError(
                 "Not a casefile command".to_owned(),
             ))
