@@ -13,7 +13,9 @@ use std::{
 #[derive(Clone, PartialEq, Eq)]
 pub enum CaseFileAction {
     /// Creates a new casefile
-    Create,
+    Create {
+        name: String,
+    },
     /// Reads all of a casefile into chat as a summary.
     Read {
         id: u64,
@@ -37,7 +39,7 @@ pub enum CaseFileAction {
 impl CaseFileAction {
     pub fn id(&self) -> Option<u64> {
         match self {
-            CaseFileAction::Create => None,
+            CaseFileAction::Create { .. } => None,
             CaseFileAction::Read { id } => Some(*id),
             CaseFileAction::AddItem { id, .. } => Some(*id),
             CaseFileAction::RemoveItem { id, .. } => Some(*id),
@@ -77,7 +79,7 @@ impl CaseFileAction {
     }
     pub fn is_actionable(&self) -> Result<bool> {
         Ok(match self {
-            CaseFileAction::Create => !self.file_exists()?,
+            CaseFileAction::Create { .. } => !self.file_exists()?,
             CaseFileAction::Read { .. }
             | CaseFileAction::AddItem { .. }
             | CaseFileAction::RemoveItem { .. }
@@ -102,8 +104,17 @@ impl CaseFileAction {
     pub async fn execute(self, shard: BotShard<'_>) -> Result<()> {
         if self.is_actionable()? {
             match self {
-                CaseFileAction::Create { .. } => todo!(),
-                CaseFileAction::Read { .. } => todo!(),
+                CaseFileAction::Create { name } => {
+                    let id = Self::lowest_id_availible()?;
+                    let path = format!("cafefiles\\{id}.txt");
+                    files::write(path, format!("{name}|unresolved\n"))?;
+                    shard
+                        .send_message(format!(
+                            "Successfully created file for '{name}'. Access it with id `{id}`."
+                        ))
+                        .await?;
+                }
+                CaseFileAction::Read { .. } => {}
                 CaseFileAction::AddItem { .. } => todo!(),
                 CaseFileAction::RemoveItem { .. } => todo!(),
                 CaseFileAction::Delete { .. } => todo!(),
@@ -133,7 +144,9 @@ impl FromStr for CaseFileAction {
             ))
         } else {
             Ok(match args[1] {
-                "create" => CaseFileAction::Create,
+                "create" => CaseFileAction::Create {
+                    name: vec_str_to_string(&args, Some(2)),
+                },
                 "read" => CaseFileAction::Read {
                     id: {
                         if args.len() < 3 {
