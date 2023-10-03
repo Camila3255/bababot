@@ -23,3 +23,5 @@ serenity = { version = "0.11.6", default-features = false, features = [
     "http",
 ] }
 tokio = { version = "1.32.0", features = ["rt-multi-thread"] }
+tungstenite = "0.20.1"
+webpki = "0.22.2"
