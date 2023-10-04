@@ -1,4 +1,5 @@
-use crate::backend::{vec_str_to_string, BotShard, PREFIX};
+use crate::backend::{vec_str_to_string, PREFIX};
+use crate::shard::BotShard;
 use eyre::Result;
 use serenity::Error as SereneError;
 use std::{

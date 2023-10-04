@@ -1,7 +1,9 @@
 pub mod backend;
 pub mod casefile;
+pub mod shard;
 
 use backend::*;
+use shard::BotShard;
 use eyre::Result;
 use serenity::{
     model::prelude::{GatewayIntents, Message},
