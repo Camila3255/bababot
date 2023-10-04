@@ -5,7 +5,7 @@ use rand::random;
 use serenity::{http::Http, model::prelude::*, prelude::*, Result as SereneResult};
 use std::{
     convert::Infallible, error::Error, fmt::Display, fs as files, str::FromStr,
-    time::Duration as StdDuration,
+    time::Duration as StdDuration, num::ParseIntError,
 };
 
 pub const PREFIX: &str = "-";
@@ -342,17 +342,18 @@ impl FromStr for Time {
         for each in s.split_inclusive(|chr: char| allowed_chars.contains(&chr)) {
             let (time_change, duration): (String, String) =
                 each.chars().partition(|x| !x.is_alphabetic());
-            if let Ok(val) = time_change.clone().parse::<u8>() {
-                match duration.chars().next().unwrap_or('\\') {
-                    's' => time.seconds = val,
-                    'm' => time.minutes = val,
-                    'h' => time.hours = val,
-                    'd' => time.days = val,
-                    '\\' => return Err(TimeErr::NoTimeSpecifier),
-                    chr => return Err(TimeErr::InvalidTimeSpecifier(chr)),
-                };
-            } else {
-                return Err(TimeErr::ParseIntError(time_change));
+            match time_change.clone().parse::<u8>() {
+                Ok(val) => {
+                    match duration.chars().next().unwrap_or('\\') {
+                        's' => time.seconds = val,
+                        'm' => time.minutes = val,
+                        'h' => time.hours = val,
+                        'd' => time.days = val,
+                        '\\' => return Err(TimeErr::NoTimeSpecifier),
+                        chr => return Err(TimeErr::InvalidTimeSpecifier(chr)),
+                    };
+                }
+                Err(e) => return Err(TimeErr::ParseIntError(e)),
             }
         }
         Ok(time)
@@ -361,7 +362,7 @@ impl FromStr for Time {
 #[derive(Debug)]
 pub enum TimeErr {
     InvalidTimeSpecifier(char),
-    ParseIntError(String),
+    ParseIntError(ParseIntError),
     NoTimeSpecifier,
 }
 
@@ -369,7 +370,11 @@ impl Error for TimeErr {}
 
 impl Display for TimeErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+        match self {
+            TimeErr::InvalidTimeSpecifier(chr) => write!(f, "{chr} is not a valid time specifier - only 's', 'm', 'h', and 'd' are valie"),
+            TimeErr::ParseIntError(e) => write!(f, "parse int error: {e}"),
+            TimeErr::NoTimeSpecifier => write!(f, "no time specifier was given"),
+        }
     }
 }
 

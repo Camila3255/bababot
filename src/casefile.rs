@@ -279,7 +279,11 @@ pub enum CaseFileError {
 
 impl Display for CaseFileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+        match self {
+            CaseFileError::ParsingError(e) => write!(f, "parsing error: {e}"),
+            CaseFileError::IOError(e) => write!(f, "io error: {e}"),
+            CaseFileError::SerenityError(e) => write!(f, "discord-originating error: {e}"),
+        }
     }
 }
 
