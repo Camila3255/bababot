@@ -2,6 +2,7 @@ use crate::backend::{vec_str_to_string, PREFIX};
 use crate::shard::BotShard;
 use eyre::Result;
 use serenity::Error as SereneError;
+use std::path::Path;
 use std::{
     error::Error,
     fmt::Display,
@@ -14,27 +15,15 @@ use std::{
 #[derive(Clone, PartialEq, Eq)]
 pub enum CaseFileAction {
     /// Creates a new casefile
-    Create {
-        name: String,
-    },
+    Create { name: String },
     /// Reads all of a casefile into chat as a summary.
-    Read {
-        id: u64,
-    },
+    Read { id: u64 },
     /// Adds an item to a casefile.
-    AddItem {
-        id: u64,
-        item: String,
-    },
+    AddItem { id: u64, item: String },
     /// Removes an item from a casefile
-    RemoveItem {
-        id: u64,
-        index: Option<u64>,
-    },
+    RemoveItem { id: u64, index: Option<u64> },
     /// Deletes a casefile
-    Delete {
-        id: u64,
-    },
+    Delete { id: u64 },
     /// Views a summary of all casefiles
     ViewAll,
 }
@@ -226,6 +215,10 @@ pub struct CaseFile {
 }
 
 impl CaseFile {
+    /// Tries to read a casefile from a file, parsing the whole file.
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, CaseFileError> {
+        Ok(files::read_to_string(path)?.parse::<Self>()?)
+    }
     /// Clones the name associated with the CaseFile
     pub fn name(&self) -> String {
         self.name.clone()
@@ -237,6 +230,29 @@ impl CaseFile {
     /// Clones the evidence items associated with the CaseFile
     pub fn items(&self) -> Vec<String> {
         self.items.clone()
+    }
+    /// Attempts to write the contents of the casefile to a specified path
+    pub fn write_to_file(&self, path: impl AsRef<Path>) -> Result<(), IOError> {
+        files::write(path, format!("{self}"))
+    }
+    /// Attempts to write the contents of the casefile to the specified file ID
+    pub fn write_to_id(&self, id: u64) -> Result<(), IOError> {
+        self.write_to_file(format!("casefiles\\{id}.txt"))
+    }
+}
+
+impl Display for CaseFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let items = self
+            .items()
+            .iter()
+            .flat_map(|string| string.chars())
+            .collect::<String>();
+        let resolution = match self.is_resolved() {
+            true => "resolved",
+            false => "unresolved",
+        };
+        write!(f, "{}|{resolution}\n{items}", self.name)
     }
 }
 
