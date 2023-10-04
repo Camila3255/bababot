@@ -9,6 +9,7 @@ use std::{
     fs::{self as files, DirEntry},
     io::Error as IOError,
     num::ParseIntError,
+    path::PathBuf,
     str::FromStr,
 };
 /// Represents an action pertaining to a Case File.
@@ -109,7 +110,7 @@ impl CaseFileAction {
             match self {
                 CaseFileAction::Create { name } => {
                     let id = Self::lowest_id_availible()?;
-                    let path = format!("cafefiles\\{id}.txt");
+                    let path = id_to_path(id);
                     files::write(path, format!("{name}|unresolved\n"))?;
                     shard
                         .send_message(format!(
@@ -209,27 +210,22 @@ impl FromStr for CaseFileAction {
 /// This format should be followed for the [FromStr] implementation to succeed.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct CaseFile {
-    name: String,
-    resolved: bool,
-    items: Vec<String>,
+    pub name: String,
+    pub resolved: bool,
+    pub items: Vec<String>,
 }
 
 impl CaseFile {
     /// Tries to read a casefile from a file, parsing the whole file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, CaseFileError> {
-        Ok(files::read_to_string(path)?.parse::<Self>()?)
+        files::read_to_string(path)?.parse::<Self>()
     }
-    /// Clones the name associated with the CaseFile
-    pub fn name(&self) -> String {
-        self.name.clone()
+    pub fn from_id(id: u64) -> Result<Self, CaseFileError> {
+        files::read_to_string(id_to_path(id))?.parse::<Self>()
     }
     /// Gets whether the case is considered resolved
     pub fn is_resolved(&self) -> bool {
         self.resolved
-    }
-    /// Clones the evidence items associated with the CaseFile
-    pub fn items(&self) -> Vec<String> {
-        self.items.clone()
     }
     /// Attempts to write the contents of the casefile to a specified path
     pub fn write_to_file(&self, path: impl AsRef<Path>) -> Result<(), IOError> {
@@ -237,14 +233,17 @@ impl CaseFile {
     }
     /// Attempts to write the contents of the casefile to the specified file ID
     pub fn write_to_id(&self, id: u64) -> Result<(), IOError> {
-        self.write_to_file(format!("casefiles\\{id}.txt"))
+        self.write_to_file(id_to_path(id))
+    }
+    pub fn push_item(&mut self, item: impl AsRef<str>) {
+        self.items.push(item.as_ref().to_owned());
     }
 }
 
 impl Display for CaseFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let items = self
-            .items()
+            .items
             .iter()
             .flat_map(|string| string.chars())
             .collect::<String>();
@@ -324,4 +323,8 @@ impl From<ParseIntError> for CaseFileError {
     fn from(value: ParseIntError) -> Self {
         Self::ParsingError(format!("{value}"))
     }
+}
+
+fn id_to_path(id: u64) -> PathBuf {
+    PathBuf::from(format!("casefiles\\{id}.txt"))
 }
