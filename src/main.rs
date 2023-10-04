@@ -3,12 +3,12 @@ pub mod casefile;
 pub mod shard;
 
 use backend::*;
-use shard::BotShard;
 use eyre::Result;
 use serenity::{
     model::prelude::{GatewayIntents, Message},
     prelude::{Client, Context, EventHandler},
 };
+use shard::BotShard;
 use std::io::Result as IOResult;
 
 #[tokio::main]

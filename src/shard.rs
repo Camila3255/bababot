@@ -4,7 +4,7 @@ use serenity::{
     http::Http,
     model::prelude::{Channel, Member, Message, PartialGuild, User},
     prelude::Context,
-    Result as SereneResult, Error as SereneError,
+    Error as SereneError, Result as SereneResult,
 };
 use std::fs as files;
 
