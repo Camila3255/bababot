@@ -268,7 +268,8 @@ impl FromStr for CaseFile {
 /// Represents a number of errors that can occur from interacting with [`CaseFile`]s.
 #[derive(Debug)]
 pub enum CaseFileError {
-    /// There was some error when parsing a [`CaseFile`] or [`CaseFileAction`]
+    /// There was some error when parsing a [`CaseFile`] or [`CaseFileAction`].
+    /// [`ParseIntError`]s get turned into this variant.
     ParsingError(String),
     /// An [IOError] was raised during file interaction.
     IOError(IOError),
