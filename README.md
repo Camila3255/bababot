@@ -17,7 +17,6 @@ Note that not all completed features are guaranteed to be included.
 
 ### User Utility
 
-- [x] XKCD lookup
 - [ ] Hot-Commands:
   - [x] XKCD
   - [x] Don't Ask to Ask
@@ -25,7 +24,7 @@ Note that not all completed features are guaranteed to be included.
   - [ ] Levelpack Lookup
 - [x] Relevant help commands
 - [x] Coin flipping + RNG
-- [x] Original behavior of "Keke is Help"
+- [x] Original username-changing behavior of "Keke is Move"
 - [ ] Trivia
 
 ### Technical
@@ -37,7 +36,7 @@ Note that not all completed features are guaranteed to be included.
 
 - [ ] Youtube playback
 - [ ] [Petpet](https://benisland.neocities.org/petpet/) Generator
-- [ ] Some complex game similar to [the Zoo bot](https://discord.com/application-directory/1008563327380766812)
+- [ ] Baba Card Game
 - [ ] Sandboxed ACE for rust
 
 ### Definite Nos
