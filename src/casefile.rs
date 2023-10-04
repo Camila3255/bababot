@@ -26,14 +26,16 @@ pub enum CaseFileAction {
         id: u64,
         item: String,
     },
-    ///
+    /// Removes an item from a casefile
     RemoveItem {
         id: u64,
         index: Option<u64>,
     },
+    /// Deletes a casefile
     Delete {
         id: u64,
     },
+    /// Views a summary of all casefiles
     ViewAll,
 }
 
