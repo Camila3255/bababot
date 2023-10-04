@@ -1,5 +1,2 @@
-src/blacklist.txt
-src/optin.txt
 target/
-src/secret.txt
 .vscode

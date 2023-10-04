@@ -6,15 +6,15 @@ use backend::*;
 use eyre::Result;
 use serenity::{
     model::prelude::{GatewayIntents, Message},
-    prelude::{Client, Context, EventHandler},
+    prelude::{Client, Context, EventHandler, SerenityError},
 };
 use shard::BotShard;
-use std::io::Result as IOResult;
+use std::{env, io::Result as IOResult};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     create_files()?;
-    let mut client = Client::builder(get_secret(), intents())
+    let mut client = Client::builder(get_secret()?, intents())
         .event_handler(Bot)
         .await?;
     client.start().await?;
@@ -35,7 +35,17 @@ impl EventHandler for Bot {
         // DM override: if message is sent to bot,
         // send message to cami
         if let MessageOrigin::PrivateChannel = shard.message_origin() {
-            if let Err(e) = shard.message_user(CAMILA, &message.content).await {
+            if let Err(e) = shard
+                .message_user(
+                    CAMILA,
+                    format!(
+                        "Incoming message from {}:\n> {}",
+                        shard.author(),
+                        shard.original_message().content.clone()
+                    ),
+                )
+                .await
+            {
                 eprintln!("Unable to send message: {e}");
             }
         }
@@ -51,9 +61,18 @@ fn intents() -> GatewayIntents {
 }
 
 /// Gets the bot token to log into the bot account.
-/// Hidden away for obvious reasons.
-fn get_secret() -> String {
-    include_str!("secret.txt").to_owned()
+/// Uses environment variables. The following are checked for having a token,
+/// in the given order
+/// - BABA_BOT_TOKEN
+/// - BOT_TOKEN
+/// - TOKEN
+/// - BOT
+fn get_secret() -> Result<String> {
+    ["BABA_BOT_TOKEN", "BOT_TOKEN", "TOKEN", "BOT"]
+        .into_iter()
+        .flat_map(env::var)
+        .next()
+        .ok_or(SerenityError::Other("could not find a valid bot token").into())
 }
 /// Creates some nessecary files for the bot to function.
 /// These are:
