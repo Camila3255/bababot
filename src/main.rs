@@ -3,10 +3,15 @@ pub mod casefile;
 
 use backend::*;
 use eyre::Result;
-use serenity::{model::prelude::*, prelude::*};
+use serenity::{
+    model::prelude::{GatewayIntents, Message},
+    prelude::{Client, Context, EventHandler},
+};
+use std::io::Result as IOResult;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    create_files()?;
     let mut client = Client::builder(get_secret(), intents())
         .event_handler(Bot)
         .await?;
@@ -22,7 +27,7 @@ impl EventHandler for Bot {
         let shard = BotShard::new(&ctx, &message);
         // keke override: if message starts with "i'm" or "i am",
         // and user is opted in, change username
-        if shard.is_kekeable().await {
+        if shard.is_kekeable().await.unwrap_or(false) {
             let _ = shard.keke_author().await;
         }
         // DM override: if message is sent to bot,
@@ -43,8 +48,22 @@ fn intents() -> GatewayIntents {
     GI::all()
 }
 
+/// Gets the bot token to log into the bot account.
+/// Hidden away for obvious reasons.
 fn get_secret() -> String {
     include_str!("secret.txt").to_owned()
+}
+/// Creates some nessecary files for the bot to function.
+/// These are:
+/// - `optin.txt`, a text file storing the user IDs who are opted into the bot.
+/// - `blacklist.txt`, a text file storing the user IDs who are blocked from using the bot.
+/// - `casefiles`, a folder containing all the various casefiles.
+fn create_files() -> IOResult<()> {
+    use std::fs as files;
+    files::File::create("optin.txt")?;
+    files::File::create("blacklist.txt")?;
+    files::create_dir("casefiles")?;
+    Ok(())
 }
 
 #[cfg(test)]

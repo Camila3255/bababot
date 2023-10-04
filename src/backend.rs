@@ -25,7 +25,7 @@ pub enum Command {
     /// Gives a message privately to the staff bot channel
     PrivateModMessage { message: String, user: String },
     /// Shows an XKCD link
-    Xkcd(u32),
+    Xkcd(u64),
     /// Sends, literally, https://dontasktoask.com/
     DontAskToAsk,
     /// Help Command
@@ -41,7 +41,7 @@ pub enum Command {
     /// A single coin flip
     CoinFlip,
     /// A randomly generated integer from 0 to [the field]
-    RandomInt(u32),
+    RandomInt(u64),
     /// Opt into getting keke'd
     Optin,
     /// Opt out of get keke'd
@@ -66,6 +66,9 @@ impl Command {
             }
         }
     }
+    /// Tells a command that being the developer is required.
+    /// If the developer did not issue the statement,
+    /// the command is turned into [`Command::NotValid`].
     pub async fn requires_dev(self, shard: BotShard<'_>) -> Self {
         if shard.author_id().await == CAMILA {
             self
@@ -144,7 +147,7 @@ impl Command {
             }
             CommandType::CoinFlip => Command::CoinFlip,
             CommandType::RandomInt => {
-                if let Ok(int) = vec_str_to_string(&args, Some(1)).parse::<u32>() {
+                if let Ok(int) = vec_str_to_string(&args, Some(1)).parse::<u64>() {
                     Command::RandomInt(int)
                 } else {
                     Command::NotValid(
@@ -158,7 +161,7 @@ impl Command {
         }
     }
     /// Executes a command.
-    /// Returns a string to send, if needed.
+    /// Any errors from the process are bubbled up.
     pub async fn execute_command(self, shard: BotShard<'_>) -> Result<()> {
         match self {
             Command::Ban(user, reason) => {
@@ -262,13 +265,33 @@ impl Command {
                     .await?;
             }
             Command::RandomInt(bound) => {
-                let int = (random::<f64>() * bound as f64) as u32;
+                let int = (random::<f64>() * bound as f64) as u64;
                 shard
                     .send_message(format!("Between 0 and {bound}, I choose... ||{int}!||"))
                     .await?;
             }
-            Command::Optin => opt_in_user(shard.author())?,
-            Command::Optout => opt_out_user(shard.author())?,
+            Command::Optin => {
+                let user = shard.author();
+                let mut file = files::read_to_string("optin.txt")?
+                    .lines()
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>();
+                if !file.contains(&format!("{}", user.id.0)) {
+                    file.push(format!("{}", user.id.0));
+                }
+                files::write("optin.txt", vec_string_to_string(&file, None))
+            }?,
+            Command::Optout => {
+                let user = shard.author();
+                let mut file = files::read_to_string("optin.txt")?
+                    .lines()
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>();
+                if file.contains(&format!("{}", user.id.0)) {
+                    file.retain(|item| item != &format!("{}", user.id.0));
+                }
+                files::write("optin.txt", vec_string_to_string(&file, None))
+            }?,
             Command::Keke => {
                 shard.send_message(
                     "https://cdn.discordapp.com/attachments/563196186912096256/799820975666888764/SPOILER_Untitled_28_1080p.mp4"
@@ -572,7 +595,6 @@ pub struct BotShard<'a> {
     message: &'a Message,
 }
 
-#[allow(dead_code)]
 impl<'a> BotShard<'a> {
     /// Creates a new [`BotShard`] given a [`Context`] and sent [`Message`].
     /// Sent messages (via `BotShard::send_message()`) are sent to
@@ -741,16 +763,16 @@ impl<'a> BotShard<'a> {
     }
     /// Checks if a user is opted in AND the message is kekeable:
     /// starts with "i'm" or "i am"
-    pub async fn is_kekeable(&self) -> bool {
-        let opted_ins = include_str!("optin.txt")
+    pub async fn is_kekeable(&self) -> Result<bool> {
+        let opted_ins = files::read_to_string("optin.txt")?
             .lines()
             .map(|x| x.parse())
             .collect::<Result<Vec<u64>, _>>();
         let opted_ins = match opted_ins {
             Ok(vals) => vals,
-            Err(_) => return false,
+            Err(_) => return Ok(false),
         };
-        opted_ins.contains(&self.author_id().await)
+        Ok(opted_ins.contains(&self.author_id().await)
             && (self
                 .original_message()
                 .content
@@ -760,9 +782,9 @@ impl<'a> BotShard<'a> {
                     .original_message()
                     .content
                     .to_lowercase()
-                    .starts_with("i am "))
+                    .starts_with("i am ")))
     }
-    pub async fn keke_author(&self) -> SereneResult<Message> {
+    pub async fn keke_author(&self) -> Result<()> {
         let potential_keke = self
             .original_message()
             .content
@@ -770,7 +792,7 @@ impl<'a> BotShard<'a> {
             .unwrap_or(&self.original_message().content)
             .strip_prefix("i am ")
             .unwrap_or(&self.original_message().content);
-        if self.is_kekeable().await {
+        if self.is_kekeable().await? {
             let name = self.author().name.clone();
             if self.original_message().content.chars().count() <= 32 {
                 let member = self.member_request(self.author_id().await).await?;
@@ -782,17 +804,20 @@ impl<'a> BotShard<'a> {
                 self.send_message(format!(
                     "{name} is `{potential_keke}`!\n\nWanna optout? use {PREFIX}keke!"
                 ))
-                .await
+                .await?;
             } else {
                 self.send_message(format!(
                     "{name} is NOT `{potential_keke}`!\n\nWanna optout? use {PREFIX}keke!"
                 ))
-                .await
+                .await?;
             }
+            Ok(())
         } else {
-            Err(SerenityError::Other("Not a KEKE, ignorable"))
+            Err(SerenityError::Other("Not a KEKE, ignorable").into())
         }
     }
+    /// Gets the origin of a message. This is either [`MessageOrigin::PrivateChannel`]
+    /// or [`MessageOrigin::PublicChannel`].
     pub fn message_origin(&self) -> MessageOrigin {
         if self.original_message().is_private() {
             MessageOrigin::PrivateChannel
@@ -807,7 +832,7 @@ pub enum MessageOrigin {
     PrivateChannel,
 }
 
-pub fn xkcd_from_string(string: &str) -> u32 {
+pub fn xkcd_from_string(string: &str) -> u64 {
     if let Ok(val) = string.parse() {
         val
     } else {
@@ -821,7 +846,10 @@ pub fn xkcd_from_string(string: &str) -> u32 {
         }
     }
 }
-
+/// Takes a slice of &[`str`] and an optional index, and returns a [`String`]
+/// of the concatenated items.
+/// If an index is provided, only the items from that index and onward
+/// are concatenated.
 pub fn vec_str_to_string(vector: &[&str], idx: Option<usize>) -> String {
     let vector = vector
         .iter()
@@ -836,6 +864,10 @@ pub fn vec_str_to_string(vector: &[&str], idx: Option<usize>) -> String {
     }
 }
 
+/// Takes a slice of &[`String`] and an optional index, and returns a [`String`]
+/// of the concatenated items.
+/// If an index is provided, only the items from that index and onward
+/// are concatenated.
 pub fn vec_string_to_string(vector: &[String], idx: Option<usize>) -> String {
     let vector = vector.to_vec();
     if let Some(index) = idx {
@@ -844,26 +876,4 @@ pub fn vec_string_to_string(vector: &[String], idx: Option<usize>) -> String {
     } else {
         vector.join(" ")
     }
-}
-
-fn opt_in_user(user: User) -> Result<(), std::io::Error> {
-    let mut file = files::read_to_string("optin.txt")?
-        .lines()
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
-    if !file.contains(&format!("{}", user.id.0)) {
-        file.push(format!("{}", user.id.0));
-    }
-    files::write("optin.txt", vec_string_to_string(&file, None))
-}
-
-fn opt_out_user(user: User) -> Result<(), std::io::Error> {
-    let mut file = files::read_to_string("optin.txt")?
-        .lines()
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
-    if file.contains(&format!("{}", user.id.0)) {
-        file.retain(|item| item != &format!("{}", user.id.0));
-    }
-    files::write("optin.txt", vec_string_to_string(&file, None))
 }

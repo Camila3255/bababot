@@ -37,6 +37,7 @@ pub enum CaseFileAction {
 }
 
 impl CaseFileAction {
+    /// Gets the relevant casefile ID, if one is present.
     pub fn id(&self) -> Option<u64> {
         match self {
             CaseFileAction::Create { .. } => None,
@@ -47,6 +48,9 @@ impl CaseFileAction {
             CaseFileAction::ViewAll => None,
         }
     }
+    /// Whether or not the relevant file exists or not.
+    /// This should not be called for cases where this is
+    /// [`CaseFileAction::Create`] or [`CaseFileAction::ViewAll`].
     pub fn file_exists(&self) -> Result<bool> {
         let id = match self.id() {
             Some(id) => id,
@@ -60,6 +64,8 @@ impl CaseFileAction {
         }
         Ok(false)
     }
+    /// Finds the relevant directory based on the relevant ID.
+    /// The "directory", in this case, is a [`DirEntry`].
     pub fn relevant_directory(&self) -> Result<DirEntry> {
         let id = self.id().ok_or(CaseFileError::IOError(IOError::new(
             std::io::ErrorKind::NotFound,
@@ -77,6 +83,7 @@ impl CaseFileAction {
         ))
         .into())
     }
+    /// Whether or not any action is actually preformable on behalf of the caller.
     pub fn is_actionable(&self) -> Result<bool> {
         Ok(match self {
             CaseFileAction::Create { .. } => !self.file_exists()?,
@@ -87,20 +94,24 @@ impl CaseFileAction {
             CaseFileAction::ViewAll => true,
         })
     }
-    pub fn lowest_id_availible() -> Result<u32, CaseFileError> {
+    /// Gets the lowest ID availible for creating a case file.
+    /// # Panics
+    /// Panics if there are `u64::MAX` casefiles.
+    pub fn lowest_id_availible() -> Result<u64, CaseFileError> {
         let ids = files::read_dir("casefiles")?
             .flat_map(|file| file.ok())
             .flat_map(|file| file.file_name().into_string().ok())
-            .flat_map(|name| name.parse::<u32>())
+            .flat_map(|name| name.parse::<u64>())
             .collect::<Vec<_>>();
         for potential_id in 0.. {
             if !ids.contains(&potential_id) {
                 return Ok(potential_id);
             }
         }
-        unreachable!("If we have u32::MAX case files I think we need something better")
+        unreachable!("If we have u64::MAX case files I think we need something better")
     }
     /// Executes the action using the given shard.
+    /// TODO: implement Read, AddItem, RemoveItem, Delete, and ViewAll
     pub async fn execute(self, shard: BotShard<'_>) -> Result<()> {
         if self.is_actionable()? {
             match self {
@@ -114,7 +125,7 @@ impl CaseFileAction {
                         ))
                         .await?;
                 }
-                CaseFileAction::Read { .. } => {}
+                CaseFileAction::Read { .. } => todo!(),
                 CaseFileAction::AddItem { .. } => todo!(),
                 CaseFileAction::RemoveItem { .. } => todo!(),
                 CaseFileAction::Delete { .. } => todo!(),
@@ -212,12 +223,15 @@ pub struct CaseFile {
 }
 
 impl CaseFile {
+    /// Clones the name associated with the CaseFile
     pub fn name(&self) -> String {
         self.name.clone()
     }
+    /// Gets whether the case is considered resolved
     pub fn is_resolved(&self) -> bool {
         self.resolved
     }
+    /// Clones the evidence items associated with the CaseFile
     pub fn items(&self) -> Vec<String> {
         self.items.clone()
     }
@@ -251,10 +265,14 @@ impl FromStr for CaseFile {
     }
 }
 
+/// Represents a number of errors that can occur from interacting with [`CaseFile`]s.
 #[derive(Debug)]
 pub enum CaseFileError {
+    /// There was some error when parsing a [`CaseFile`] or [`CaseFileAction`]
     ParsingError(String),
+    /// An [IOError] was raised during file interaction.
     IOError(IOError),
+    /// [`serenity`] raised an error when using the [`BotShard`].
     SerenityError(SereneError),
 }
 
