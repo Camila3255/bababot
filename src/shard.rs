@@ -1,9 +1,14 @@
-use crate::backend::{Command, MessageOrigin, Time, BABACORD_ID, CAMILA, PREFIX, STAFF_ROLE};
+use crate::backend::{Command, MessageOrigin, Time, PREFIX};
 use eyre::Result;
 use serenity::{
+    client::{Cache, Context},
     http::Http,
-    model::prelude::{Channel, Member, Message, PartialGuild, User},
-    prelude::Context,
+    model::{
+        channel::{Channel, Message},
+        guild::{Member, PartialGuild},
+        user::User,
+        Permissions,
+    },
     Error as SereneError, Result as SereneResult,
 };
 use std::fs as files;
@@ -64,7 +69,7 @@ impl<'a> BotShard<'a> {
     /// Attempts to request a [`Member`] from the guild.
     pub async fn member_request(&self, user_id: impl Into<u64>) -> SereneResult<Member> {
         self.http_server()
-            .get_member(BABACORD_ID, user_id.into())
+            .get_member(self.guild_id()?, user_id.into())
             .await
     }
     /// Attempts to request a [`User`] from the http server.
@@ -165,20 +170,18 @@ impl<'a> BotShard<'a> {
             .say(self.http_server(), message.as_ref())
             .await
     }
+    pub fn cache(&self) -> &Cache {
+        &self.context().cache
+    }
     /// Returns whether a requested user is a mod.
     /// Unlike other functions, errors fallback to returning `false`.
     /// The dev always is considered a moderator.
-    pub async fn user_is_mod(&self, user_id: impl Into<u64>) -> bool {
-        match self.user_request(user_id).await {
-            Ok(user) => match user
-                .has_role(self.http_server(), BABACORD_ID, STAFF_ROLE)
-                .await
-            {
-                Ok(b) => b || (user.id.0 == CAMILA),
-                Err(_) => false,
-            },
-            Err(_) => false,
-        }
+    pub async fn user_is_mod(&self, user_id: impl Into<u64>) -> Result<bool> {
+        Ok(self
+            .member_request(user_id)
+            .await?
+            .permissions(self.cache())?
+            .contains(Permissions::BAN_MEMBERS))
     }
     pub async fn author_id(&self) -> u64 {
         self.author().id.0
@@ -246,5 +249,11 @@ impl<'a> BotShard<'a> {
         } else {
             MessageOrigin::PublicChannel
         }
+    }
+    pub fn guild_id(&self) -> SereneResult<u64> {
+        self.original_message()
+            .guild_id
+            .ok_or(SereneError::Other("No guild id could be found"))
+            .map(|x| x.0)
     }
 }

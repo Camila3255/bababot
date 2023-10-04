@@ -3,16 +3,20 @@ use chrono::Duration;
 use eyre::Result;
 use indoc::indoc;
 use rand::random;
-use serenity::model::prelude::{Timestamp, UserId};
-use serenity::Error as SerenityError;
+use serenity::{
+    model::prelude::{Timestamp, UserId},
+    Error as SerenityError,
+};
 use std::{
     convert::Infallible, error::Error, fmt::Display, fs as files, num::ParseIntError, str::FromStr,
     time::Duration as StdDuration,
 };
 
+/// The prefix for the bot. Messages must start with this to invoke the bot,
+/// else the command is ignored.
 pub const PREFIX: &str = "-";
-pub const BABACORD_ID: u64 = 1095892457771782277;
-pub const STAFF_ROLE: u64 = 1095892509139402782;
+/// The ID for the current developer of the bot.
+/// Used to validate [`Command::Dev`] commands.
 pub const CAMILA: u64 = 284883095981916160;
 
 /// A representation of a given bot command.
@@ -57,15 +61,18 @@ impl Command {
     /// If the role is not present, the command is turned into [`Command::NotValid`],
     /// else the command is returned unchanged.
     pub async fn requires_mod(self, shard: BotShard<'_>) -> Self {
-        if shard.user_is_mod(shard.author().id.0).await {
-            self
-        } else {
-            match self {
-                Self::Ban(..) | Self::Mute(..) | Self::Notice(_) => {
-                    Self::NotValid("User is not a registered moderator".to_owned())
-                }
-                this => this,
+        if let Ok(b) = shard.user_is_mod(shard.author().id.0).await {
+            match b {
+                true => self,
+                false => match self {
+                    Self::Ban(..) | Self::Mute(..) | Self::Notice(..) => {
+                        Self::NotValid("User is not a moderator!".to_owned())
+                    }
+                    elsewise => elsewise,
+                },
             }
+        } else {
+            Self::NotValid("Could not determine whether the user is a mod, so I'm falling back to not allowing it.".to_owned())
         }
     }
     /// Tells a command that being the developer is required.
