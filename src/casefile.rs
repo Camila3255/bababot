@@ -118,7 +118,20 @@ impl CaseFileAction {
                         ))
                         .await?;
                 }
-                CaseFileAction::Read { .. } => todo!(),
+                CaseFileAction::Read { id } => {
+                    let file = CaseFile::from_id(id)?;
+                    let items = file
+                        .items
+                        .clone()
+                        .iter_mut()
+                        .flat_map(|string| {
+                            string.push_str("\n> ");
+                            string.chars()
+                        })
+                        .collect::<String>();
+                    let readable = format!("Case #{id} => {}\n{items}", file.name);
+                    shard.send_message(readable).await?;
+                }
                 CaseFileAction::AddItem { .. } => todo!(),
                 CaseFileAction::RemoveItem { .. } => todo!(),
                 CaseFileAction::Delete { .. } => todo!(),
