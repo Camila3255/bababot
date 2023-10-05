@@ -132,10 +132,44 @@ impl CaseFileAction {
                     let readable = format!("Case #{id} => {}\n{items}", file.name);
                     shard.send_message(readable).await?;
                 }
-                CaseFileAction::AddItem { .. } => todo!(),
-                CaseFileAction::RemoveItem { .. } => todo!(),
-                CaseFileAction::Delete { .. } => todo!(),
-                CaseFileAction::ViewAll => todo!(),
+                CaseFileAction::AddItem { id, item } => {
+                    let mut file = CaseFile::from_id(id)?;
+                    file.push_item(item);
+                    file.write_to_id(id)?;
+                    shard
+                        .send_message(format!("Successfully wrote new item to Casefile #{id}!"))
+                        .await?;
+                }
+                CaseFileAction::RemoveItem { id, index } => {
+                    let mut file = CaseFile::from_id(id)?;
+                    let item = match index {
+                        Some(idx) => Some(file.items.remove(idx as usize)),
+                        None => file.items.pop(),
+                    }
+                    .unwrap_or("[unable to find item]".to_owned());
+                    file.write_to_id(id)?;
+                    shard
+                        .send_message(format!("Removed item `{item}` from Casefile #{id}."))
+                        .await?;
+                }
+                CaseFileAction::Delete { id } => {
+                    files::remove_file(id_to_path(id))?;
+                    shard
+                        .send_message(format!("Successfully removed Casefile #{id}."))
+                        .await?;
+                }
+                CaseFileAction::ViewAll => {
+                    let mut buffer = String::from("Here's all the casefiles: \n");
+                    for file in files::read_dir("casefiles")
+                        .into_iter()
+                        .flatten()
+                        .flatten()
+                        .flat_map(|entry| CaseFile::from_path(entry.path()))
+                    {
+                        buffer.push_str(format!("[{}] | {}\n", file.resolution(), file.name).as_str());
+                    }
+                    shard.send_message(buffer).await?;
+                }
             }
         } else {
             shard
@@ -151,7 +185,7 @@ impl FromStr for CaseFileAction {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let args = s.split(|chr| chr == ' ' || chr == '\n').collect::<Vec<_>>();
-        if args.is_empty() || args[0] != "casefuile" {
+        if args.is_empty() || args[0] != "casefile" {
             Err(CaseFileError::ParsingError(
                 "Not a casefile command".to_owned(),
             ))
@@ -240,6 +274,12 @@ impl CaseFile {
     pub fn is_resolved(&self) -> bool {
         self.resolved
     }
+    pub fn resolution(&self) -> String {
+        match self.is_resolved() {
+            true => "resolved",
+            false => "unresolved",
+        }.to_owned()
+    }
     /// Attempts to write the contents of the casefile to a specified path
     pub fn write_to_file(&self, path: impl AsRef<Path>) -> Result<(), IOError> {
         files::write(path, format!("{self}"))
@@ -258,7 +298,7 @@ impl Display for CaseFile {
         let items = self
             .items
             .iter()
-            .flat_map(|string| string.chars())
+            .flat_map(|string| string.chars().chain(std::iter::once('\n')))
             .collect::<String>();
         let resolution = match self.is_resolved() {
             true => "resolved",
