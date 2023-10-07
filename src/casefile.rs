@@ -378,6 +378,6 @@ impl From<ParseIntError> for CaseFileError {
     }
 }
 
-fn id_to_path(id: u64) -> PathBuf {
+pub fn id_to_path(id: u64) -> PathBuf {
     PathBuf::from(format!("casefiles\\{id}.txt"))
 }

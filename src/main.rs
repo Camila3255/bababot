@@ -89,9 +89,9 @@ fn create_files() -> IOResult<()> {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{str::FromStr, path::PathBuf};
 
-    use crate::*;
+    use crate::{*, casefile::id_to_path};
     #[test]
     fn time_parse_seconds() {
         let target = Time {
@@ -200,5 +200,21 @@ mod test {
         let target = CommandType::Notice;
         let parsed = "-notice please keep in mind rule 1984".parse().unwrap();
         assert_eq!(target, parsed);
+    }
+
+    #[test]
+    fn id_to_path_parsing() {
+        let path = id_to_path(6);
+        assert!(is_valid_file(path))
+    }
+
+    fn with_file<T>(path: PathBuf, closure: impl FnOnce(std::fs::File) -> T) -> IOResult<T> {
+        let file = std::fs::File::create(&path)?;
+        let result = closure(file);
+        std::fs::remove_file(&path).expect(&format!("File deletion didn't occur, please delete {}", path.display()));
+        Ok(result)
+    }
+    fn is_valid_file(path: PathBuf) -> bool {
+        with_file(path, |_| true).unwrap_or(false)
     }
 }
