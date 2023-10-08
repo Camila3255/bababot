@@ -89,9 +89,11 @@ fn create_files() -> IOResult<()> {
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, path::PathBuf};
+    use std::str::FromStr;
 
-    use crate::{*, casefile::id_to_path};
+    use indoc::indoc;
+
+    use crate::{casefile::CaseFile, *};
     #[test]
     fn time_parse_seconds() {
         let target = Time {
@@ -203,18 +205,29 @@ mod test {
     }
 
     #[test]
-    fn id_to_path_parsing() {
-        let path = id_to_path(6);
-        assert!(is_valid_file(path))
+    fn casefile_parsing_creation() {
+        let file = indoc! {"
+            Foo v. Bar|unresolved
+            - Among us
+        "}
+        .parse::<CaseFile>();
+        assert!(file.is_ok());
     }
-
-    fn with_file<T>(path: PathBuf, closure: impl FnOnce(std::fs::File) -> T) -> IOResult<T> {
-        let file = std::fs::File::create(&path)?;
-        let result = closure(file);
-        std::fs::remove_file(&path).expect(&format!("File deletion didn't occur, please delete {}", path.display()));
-        Ok(result)
-    }
-    fn is_valid_file(path: PathBuf) -> bool {
-        with_file(path, |_| true).unwrap_or(false)
+    #[test]
+    fn casefile_parsing_equality() {
+        let file = indoc! {"
+            Foo v. Bar|unresolved
+            - Among us
+        "}
+        .parse::<CaseFile>()
+        .unwrap();
+        assert_eq!(
+            file,
+            CaseFile {
+                name: "Foo v. Bar".to_owned(),
+                resolved: false,
+                items: vec!["Among Us".to_owned()]
+            }
+        )
     }
 }

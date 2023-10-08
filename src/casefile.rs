@@ -379,5 +379,5 @@ impl From<ParseIntError> for CaseFileError {
 }
 
 pub fn id_to_path(id: u64) -> PathBuf {
-    PathBuf::from(format!("casefiles\\{id}.txt"))
+    PathBuf::from(format!("casefiles/{id}.txt"))
 }
