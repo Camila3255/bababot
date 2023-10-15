@@ -1,17 +1,20 @@
-use crate::backend::{vec_str_to_string, PREFIX};
+use crate::backend::{vec_str_to_string, vec_string_to_string, PREFIX};
 use crate::shard::BotShard;
 use eyre::Result;
+use rusqlite as sql;
 use serenity::Error as SereneError;
-use std::path::Path;
+use std::ops::{Deref, DerefMut};
 use std::{
     error::Error,
     fmt::Display,
     fs::{self as files, DirEntry},
     io::Error as IOError,
     num::ParseIntError,
-    path::PathBuf,
+    path::Path,
     str::FromStr,
 };
+
+pub const DATABASE_FILE: &str = "./db.db3";
 /// Represents an action pertaining to a Case File.
 #[derive(Clone, PartialEq, Eq)]
 pub enum CaseFileAction {
@@ -104,14 +107,20 @@ impl CaseFileAction {
         unreachable!("If we have u64::MAX case files I think we need something better")
     }
     /// Executes the action using the given shard.
-    /// TODO: implement Read, AddItem, RemoveItem, Delete, and ViewAll
+    /// TODO: update all to use the new database
     pub async fn execute(self, shard: BotShard<'_>) -> Result<()> {
         if self.is_actionable()? {
             match self {
                 CaseFileAction::Create { name } => {
                     let id = Self::lowest_id_availible()?;
-                    let path = id_to_path(id);
-                    files::write(path, format!("{name}|unresolved\n"))?;
+                    let db = query_database()?;
+                    db.prepare(
+                        "
+                        INSERT INTO cases (id, name, reso, data)
+                        VALUES ((?1), (?2), (?3), (?4))
+                    ",
+                    )?
+                    .execute((&id, &name, false, ""))?;
                     shard
                         .send_message(format!(
                             "Successfully created file for '{name}'. Access it with id `{id}`."
@@ -153,7 +162,13 @@ impl CaseFileAction {
                         .await?;
                 }
                 CaseFileAction::Delete { id } => {
-                    files::remove_file(id_to_path(id))?;
+                    let db = query_database()?;
+                    db.prepare(
+                        "
+                        DELETE FROM cases WHERE id = (?1)
+                    ",
+                    )?
+                    .execute((&id,))?;
                     shard
                         .send_message(format!("Successfully removed Casefile #{id}."))
                         .await?;
@@ -166,7 +181,9 @@ impl CaseFileAction {
                         .flatten()
                         .flat_map(|entry| CaseFile::from_path(entry.path()))
                     {
-                        buffer.push_str(format!("[{}] | {}\n", file.resolution(), file.name).as_str());
+                        buffer.push_str(
+                            format!("[{}] | {}\n", file.resolution(), file.name).as_str(),
+                        );
                     }
                     shard.send_message(buffer).await?;
                 }
@@ -267,9 +284,6 @@ impl CaseFile {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, CaseFileError> {
         files::read_to_string(path)?.parse::<Self>()
     }
-    pub fn from_id(id: u64) -> Result<Self, CaseFileError> {
-        files::read_to_string(id_to_path(id))?.parse::<Self>()
-    }
     /// Gets whether the case is considered resolved
     pub fn is_resolved(&self) -> bool {
         self.resolved
@@ -278,18 +292,51 @@ impl CaseFile {
         match self.is_resolved() {
             true => "resolved",
             false => "unresolved",
-        }.to_owned()
+        }
+        .to_owned()
     }
     /// Attempts to write the contents of the casefile to a specified path
     pub fn write_to_file(&self, path: impl AsRef<Path>) -> Result<(), IOError> {
         files::write(path, format!("{self}"))
     }
-    /// Attempts to write the contents of the casefile to the specified file ID
-    pub fn write_to_id(&self, id: u64) -> Result<(), IOError> {
-        self.write_to_file(id_to_path(id))
-    }
     pub fn push_item(&mut self, item: impl AsRef<str>) {
         self.items.push(item.as_ref().to_owned());
+    }
+    pub fn from_id(id: u64) -> Result<CaseFile> {
+        let db = query_database()?;
+        let mut statement =
+            db.prepare(format!("SELECT name, reso, data FROM cases WHERE id = {id}").as_str())?;
+        let mut case = statement.query_map([], |row| {
+            let name = row.get::<_, String>(0)?;
+            let resolved = row.get::<_, bool>(1)?;
+            let items = row
+                .get::<_, String>(2)?
+                .lines()
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            Ok(CaseFile {
+                name,
+                resolved,
+                items,
+            })
+        })?;
+        let case = case.next().ok_or_else(|| {
+            CaseFileError::ParsingError("Couldn't get the case from the SQL database".to_owned())
+        })??;
+        Ok(case)
+    }
+    pub fn write_to_id(&self, id: u64) -> Result<()> {
+        let db = query_database()?;
+        let data = vec_string_to_string(&self.items, None);
+        db.prepare(
+            "
+            UPDATE cases
+            SET data = (?1)
+            WHERE id = (?2)
+        ",
+        )?
+        .execute((&id, &data))?;
+        Ok(())
     }
 }
 
@@ -378,6 +425,54 @@ impl From<ParseIntError> for CaseFileError {
     }
 }
 
-pub fn id_to_path(id: u64) -> PathBuf {
-    PathBuf::from(format!("casefiles/{id}.txt"))
+pub struct Database(sql::Connection);
+
+impl Deref for Database {
+    type Target = sql::Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Database {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// Attempts to connect to the database file.
+pub fn query_database() -> Result<Database, sql::Error> {
+    Ok(Database(sql::Connection::open(DATABASE_FILE)?))
+}
+
+/// Attempts to create and inditalize the database.
+/// Only does so if the database exists
+pub fn create_database() -> Result<(), sql::Error> {
+    // if file doesn't exist
+    if std::fs::File::open(DATABASE_FILE).is_err() {
+        let db = query_database()?;
+        db.execute(
+            "
+            CREATE TABLE users (
+                id   INTEGER PRIMARY KEY
+                keke BOOLEAN
+                blck BOOLEAN
+            )
+            ",
+            (),
+        )?;
+        db.execute(
+            "
+            CREATE TABLE cases (
+                id   INTEGER PRIMARY KEY
+                name TINYTEXT
+                reso BOOLEAN
+                data LONGTEXT
+            )
+            ",
+            (),
+        )?;
+    }
+    Ok(())
 }

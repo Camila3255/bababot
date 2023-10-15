@@ -9,19 +9,24 @@ use serenity::{
     prelude::{Client, Context, EventHandler, SerenityError},
 };
 use shard::BotShard;
-use std::{env, io::Result as IOResult};
+use std::env;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    create_files()?;
     let mut client = Client::builder(get_secret()?, intents())
-        .event_handler(Bot)
+        .event_handler(Bot::new())
         .await?;
     client.start().await?;
     Ok(())
 }
 
 struct Bot;
+
+impl Bot {
+    fn new() -> Self {
+        Self
+    }
+}
 
 #[async_trait::async_trait]
 impl EventHandler for Bot {
@@ -73,18 +78,6 @@ fn get_secret() -> Result<String> {
         .flat_map(env::var)
         .next()
         .ok_or(SerenityError::Other("could not find a valid bot token").into())
-}
-/// Creates some nessecary files for the bot to function.
-/// These are:
-/// - `optin.txt`, a text file storing the user IDs who are opted into the bot.
-/// - `blacklist.txt`, a text file storing the user IDs who are blocked from using the bot.
-/// - `casefiles`, a folder containing all the various casefiles.
-fn create_files() -> IOResult<()> {
-    use std::fs as files;
-    files::File::create("optin.txt")?;
-    files::File::create("blacklist.txt")?;
-    files::create_dir("casefiles")?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -203,7 +196,6 @@ mod test {
         let parsed = "-notice please keep in mind rule 1984".parse().unwrap();
         assert_eq!(target, parsed);
     }
-
     #[test]
     fn casefile_parsing_creation() {
         let file = indoc! {"
