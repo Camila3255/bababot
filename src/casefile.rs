@@ -4,15 +4,7 @@ use eyre::Result;
 use rusqlite as sql;
 use serenity::Error as SereneError;
 use std::ops::{Deref, DerefMut};
-use std::{
-    error::Error,
-    fmt::Display,
-    fs::{self as files, DirEntry},
-    io::Error as IOError,
-    num::ParseIntError,
-    path::Path,
-    str::FromStr,
-};
+use std::{error::Error, fmt::Display, io::Error as IOError, num::ParseIntError, str::FromStr};
 
 pub const DATABASE_FILE: &str = "./db.db3";
 /// Represents an action pertaining to a Case File.
@@ -44,155 +36,96 @@ impl CaseFileAction {
             CaseFileAction::ViewAll => None,
         }
     }
-    /// Whether or not the relevant file exists or not.
-    /// This should not be called for cases where this is
-    /// [`CaseFileAction::Create`] or [`CaseFileAction::ViewAll`].
-    pub fn file_exists(&self) -> Result<bool> {
-        let id = match self.id() {
-            Some(id) => id,
-            None => return Ok(false),
-        };
-        for slot in files::read_dir("casefiles")? {
-            let file = slot?;
-            if file.file_name() == format!("{id}").as_str() {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-    /// Finds the relevant directory based on the relevant ID.
-    /// The "directory", in this case, is a [`DirEntry`].
-    pub fn relevant_directory(&self) -> Result<DirEntry> {
-        let id = self.id().ok_or(CaseFileError::IOError(IOError::new(
-            std::io::ErrorKind::NotFound,
-            "No relevant directory",
-        )))?;
-        for slot in files::read_dir("casefiles")? {
-            let file = slot?;
-            if file.file_name() == format!("{id}").as_str() {
-                return Ok(file);
-            }
-        }
-        Err(CaseFileError::IOError(IOError::new(
-            std::io::ErrorKind::NotFound,
-            "Could not find the corresponding entry",
-        ))
-        .into())
-    }
-    /// Whether or not any action is actually preformable on behalf of the caller.
-    pub fn is_actionable(&self) -> Result<bool> {
-        Ok(match self {
-            CaseFileAction::Create { .. } => !self.file_exists()?,
-            CaseFileAction::Read { .. }
-            | CaseFileAction::AddItem { .. }
-            | CaseFileAction::RemoveItem { .. }
-            | CaseFileAction::Delete { .. } => self.file_exists()?,
-            CaseFileAction::ViewAll => true,
-        })
-    }
     /// Gets the lowest ID availible for creating a case file.
     /// # Panics
     /// Panics if there are `u64::MAX` casefiles.
-    pub fn lowest_id_availible() -> Result<u64, CaseFileError> {
-        let ids = files::read_dir("casefiles")?
-            .flat_map(|file| file.ok())
-            .flat_map(|file| file.file_name().into_string().ok())
-            .flat_map(|name| name.parse::<u64>())
-            .collect::<Vec<_>>();
-        for potential_id in 0.. {
-            if !ids.contains(&potential_id) {
-                return Ok(potential_id);
-            }
-        }
-        unreachable!("If we have u64::MAX case files I think we need something better")
+    pub fn lowest_id_availible() -> Result<u64> {
+        let db = query_database()?;
+        let mut id = 0;
+        // intentional ignore of () iterator
+        let _ = db.prepare("SELECT TOP 1 FROM cases")?
+            .query_map((), |row| {
+                Ok({
+                    let x = row.get::<_, u64>(0)?;
+                    id = id.max(x);
+                })
+            })?;
+        Ok(id)
     }
     /// Executes the action using the given shard.
-    /// TODO: update all to use the new database
     pub async fn execute(self, shard: BotShard<'_>) -> Result<()> {
-        if self.is_actionable()? {
-            match self {
-                CaseFileAction::Create { name } => {
-                    let id = Self::lowest_id_availible()?;
-                    let db = query_database()?;
-                    db.prepare(
-                        "
+        match self {
+            CaseFileAction::Create { name } => {
+                let id = Self::lowest_id_availible()?;
+                let db = query_database()?;
+                db.prepare(
+                    "
                         INSERT INTO cases (id, name, reso, data)
                         VALUES ((?1), (?2), (?3), (?4))
                     ",
-                    )?
-                    .execute((&id, &name, false, ""))?;
-                    shard
-                        .send_message(format!(
-                            "Successfully created file for '{name}'. Access it with id `{id}`."
-                        ))
-                        .await?;
+                )?
+                .execute((&id, &name, false, ""))?;
+                shard
+                    .send_message(format!(
+                        "Successfully created file for '{name}'. Access it with id `{id}`."
+                    ))
+                    .await?;
+            }
+            CaseFileAction::Read { id } => {
+                let file = CaseFile::from_id(id)?;
+                let items = file
+                    .items
+                    .clone()
+                    .iter_mut()
+                    .flat_map(|string| {
+                        string.push_str("\n> ");
+                        string.chars()
+                    })
+                    .collect::<String>();
+                let readable = format!("Case #{id} => {}\n{items}", file.name);
+                shard.send_message(readable).await?;
+            }
+            CaseFileAction::AddItem { id, item } => {
+                let mut file = CaseFile::from_id(id)?;
+                file.push_item(item);
+                file.write_to_id(id)?;
+                shard
+                    .send_message(format!("Successfully wrote new item to Casefile #{id}!"))
+                    .await?;
+            }
+            CaseFileAction::RemoveItem { id, index } => {
+                let mut file = CaseFile::from_id(id)?;
+                let item = match index {
+                    Some(idx) => Some(file.items.remove(idx as usize)),
+                    None => file.items.pop(),
                 }
-                CaseFileAction::Read { id } => {
-                    let file = CaseFile::from_id(id)?;
-                    let items = file
-                        .items
-                        .clone()
-                        .iter_mut()
-                        .flat_map(|string| {
-                            string.push_str("\n> ");
-                            string.chars()
-                        })
-                        .collect::<String>();
-                    let readable = format!("Case #{id} => {}\n{items}", file.name);
-                    shard.send_message(readable).await?;
-                }
-                CaseFileAction::AddItem { id, item } => {
-                    let mut file = CaseFile::from_id(id)?;
-                    file.push_item(item);
-                    file.write_to_id(id)?;
-                    shard
-                        .send_message(format!("Successfully wrote new item to Casefile #{id}!"))
-                        .await?;
-                }
-                CaseFileAction::RemoveItem { id, index } => {
-                    let mut file = CaseFile::from_id(id)?;
-                    let item = match index {
-                        Some(idx) => Some(file.items.remove(idx as usize)),
-                        None => file.items.pop(),
-                    }
-                    .unwrap_or("[unable to find item]".to_owned());
-                    file.write_to_id(id)?;
-                    shard
-                        .send_message(format!("Removed item `{item}` from Casefile #{id}."))
-                        .await?;
-                }
-                CaseFileAction::Delete { id } => {
-                    let db = query_database()?;
-                    db.prepare(
-                        "
+                .unwrap_or("[unable to find item]".to_owned());
+                file.write_to_id(id)?;
+                shard
+                    .send_message(format!("Removed item `{item}` from Casefile #{id}."))
+                    .await?;
+            }
+            CaseFileAction::Delete { id } => {
+                let db = query_database()?;
+                db.prepare(
+                    "
                         DELETE FROM cases WHERE id = (?1)
                     ",
-                    )?
-                    .execute((&id,))?;
-                    shard
-                        .send_message(format!("Successfully removed Casefile #{id}."))
-                        .await?;
-                }
-                CaseFileAction::ViewAll => {
-                    let mut buffer = String::from("Here's all the casefiles: \n");
-                    for file in files::read_dir("casefiles")
-                        .into_iter()
-                        .flatten()
-                        .flatten()
-                        .flat_map(|entry| CaseFile::from_path(entry.path()))
-                    {
-                        buffer.push_str(
-                            format!("[{}] | {}\n", file.resolution(), file.name).as_str(),
-                        );
-                    }
-                    shard.send_message(buffer).await?;
-                }
+                )?
+                .execute((&id,))?;
+                shard
+                    .send_message(format!("Successfully removed Casefile #{id}."))
+                    .await?;
             }
-        } else {
-            shard
-                .send_message("Oops! Looks like your casefile request was somehow malformed.")
-                .await?;
+            CaseFileAction::ViewAll => {
+                let mut buffer = String::from("Here's all the casefiles: \n");
+                for file in CaseFile::all_files() {
+                    buffer.push_str(format!("[{}] | {}\n", file.resolution(), file.name).as_str());
+                }
+                shard.send_message(buffer).await?;
+            }
         }
+
         Ok(())
     }
 }
@@ -280,10 +213,6 @@ pub struct CaseFile {
 }
 
 impl CaseFile {
-    /// Tries to read a casefile from a file, parsing the whole file.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, CaseFileError> {
-        files::read_to_string(path)?.parse::<Self>()
-    }
     /// Gets whether the case is considered resolved
     pub fn is_resolved(&self) -> bool {
         self.resolved
@@ -296,9 +225,6 @@ impl CaseFile {
         .to_owned()
     }
     /// Attempts to write the contents of the casefile to a specified path
-    pub fn write_to_file(&self, path: impl AsRef<Path>) -> Result<(), IOError> {
-        files::write(path, format!("{self}"))
-    }
     pub fn push_item(&mut self, item: impl AsRef<str>) {
         self.items.push(item.as_ref().to_owned());
     }
@@ -324,6 +250,13 @@ impl CaseFile {
             CaseFileError::ParsingError("Couldn't get the case from the SQL database".to_owned())
         })??;
         Ok(case)
+    }
+    /// Gets an iterator of all the stored casefiles.
+    /// Any errors returned are thrown out.
+    pub fn all_files() -> impl Iterator<Item = Self> {
+        (0..CaseFileAction::lowest_id_availible().unwrap_or_default())
+            .map(Self::from_id)
+            .flatten()
     }
     pub fn write_to_id(&self, id: u64) -> Result<()> {
         let db = query_database()?;
