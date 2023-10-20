@@ -1,3 +1,5 @@
+//! Deals with casefiles, abstracted with [`Casefile`] structs.
+
 use crate::backend::{vec_str_to_string, vec_string_to_string, PREFIX};
 use crate::shard::BotShard;
 use eyre::Result;
@@ -6,20 +8,40 @@ use serenity::Error as SereneError;
 use std::ops::{Deref, DerefMut};
 use std::{error::Error, fmt::Display, io::Error as IOError, num::ParseIntError, str::FromStr};
 
+/// Points to the file that should be used for the internal SQL database
 pub const DATABASE_FILE: &str = "./db.db3";
 /// Represents an action pertaining to a Case File.
 #[derive(Clone, PartialEq, Eq)]
 pub enum CaseFileAction {
     /// Creates a new casefile
-    Create { name: String },
+    Create {
+        #[doc = "the name of the case"]
+        name: String,
+    },
     /// Reads all of a casefile into chat as a summary.
-    Read { id: u64 },
+    Read {
+        #[doc = "the relevant id"]
+        id: u64,
+    },
     /// Adds an item to a casefile.
-    AddItem { id: u64, item: String },
+    AddItem {
+        #[doc = "the relevant id"]
+        id: u64,
+        #[doc = "the item to add to the file"]
+        item: String,
+    },
     /// Removes an item from a casefile
-    RemoveItem { id: u64, index: Option<u64> },
+    RemoveItem {
+        #[doc = "the relevant id"]
+        id: u64,
+        #[doc = "docs"]
+        index: Option<u64>,
+    },
     /// Deletes a casefile
-    Delete { id: u64 },
+    Delete {
+        #[doc = "the relevant id"]
+        id: u64,
+    },
     /// Views a summary of all casefiles
     ViewAll,
 }
@@ -43,12 +65,12 @@ impl CaseFileAction {
         let db = query_database()?;
         let mut id = 0;
         // intentional ignore of () iterator
-        let _ = db.prepare("SELECT TOP 1 FROM cases")?
+        let _ = db
+            .prepare("SELECT TOP 1 FROM cases")?
             .query_map((), |row| {
-                Ok({
-                    let x = row.get::<_, u64>(0)?;
-                    id = id.max(x);
-                })
+                let x = row.get::<_, u64>(0)?;
+                id = id.max(x);
+                Ok(())
             })?;
         Ok(id)
     }
@@ -196,19 +218,14 @@ impl FromStr for CaseFileAction {
     }
 }
 /// A representation of a case file.
-/// an example file might look like this:
-/// ```txt
-/// [casefiles/1.txt]
-/// Foo v. Bar|resolved
-/// - Foo hates bar we thing
-/// - Nvm they're just gay
-/// - [link to kissing video]
-/// ```
 /// This format should be followed for the [FromStr] implementation to succeed.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct CaseFile {
+    /// The name of the casefile
     pub name: String,
+    /// Whether or not the casefile is resolved (true = resolved)
     pub resolved: bool,
+    /// The related evidence or other noteworthy items
     pub items: Vec<String>,
 }
 
@@ -217,6 +234,7 @@ impl CaseFile {
     pub fn is_resolved(&self) -> bool {
         self.resolved
     }
+    /// Gets the resolution as a string (either `"resolved"` or `"unresolved"`).
     pub fn resolution(&self) -> String {
         match self.is_resolved() {
             true => "resolved",
@@ -224,10 +242,11 @@ impl CaseFile {
         }
         .to_owned()
     }
-    /// Attempts to write the contents of the casefile to a specified path
+    /// Attempts to write a new item to this casefile
     pub fn push_item(&mut self, item: impl AsRef<str>) {
         self.items.push(item.as_ref().to_owned());
     }
+    /// Attempts to get a casefile given an ID.
     pub fn from_id(id: u64) -> Result<CaseFile> {
         let db = query_database()?;
         let mut statement =
@@ -254,10 +273,9 @@ impl CaseFile {
     /// Gets an iterator of all the stored casefiles.
     /// Any errors returned are thrown out.
     pub fn all_files() -> impl Iterator<Item = Self> {
-        (0..CaseFileAction::lowest_id_availible().unwrap_or_default())
-            .map(Self::from_id)
-            .flatten()
+        (0..CaseFileAction::lowest_id_availible().unwrap_or_default()).flat_map(Self::from_id)
     }
+    /// Writes the contents of this casefile to the relevant id.
     pub fn write_to_id(&self, id: u64) -> Result<()> {
         let db = query_database()?;
         let data = vec_string_to_string(&self.items, None);
@@ -358,6 +376,7 @@ impl From<ParseIntError> for CaseFileError {
     }
 }
 
+/// Represents a connection to the internal database.
 pub struct Database(sql::Connection);
 
 impl Deref for Database {

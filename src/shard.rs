@@ -1,4 +1,5 @@
-use crate::backend::{Command, MessageOrigin, Time, PREFIX};
+//! Deals with a [`BotShard`], the main driver that connects to discord.
+use crate::{backend::{Command, MessageOrigin, Time, PREFIX}, casefile::query_database};
 use eyre::Result;
 use serenity::{
     client::{Cache, Context},
@@ -11,8 +12,6 @@ use serenity::{
     },
     Error as SereneError, Result as SereneResult,
 };
-use std::fs as files;
-
 /// Represents a shard of a bot doing calculations for a single message.
 /// Has some helper methods for sending messages and interacting
 /// with the inner HTTP server.
@@ -170,6 +169,7 @@ impl<'a> BotShard<'a> {
             .say(self.http_server(), message.as_ref())
             .await
     }
+    /// Gets a reference to the cache inside the context.
     pub fn cache(&self) -> &Cache {
         &self.context().cache
     }
@@ -183,32 +183,26 @@ impl<'a> BotShard<'a> {
             .permissions(self.cache())?
             .contains(Permissions::BAN_MEMBERS))
     }
+    /// Gets the ID of the original author.
     pub async fn author_id(&self) -> u64 {
         self.author().id.0
     }
     /// Checks if a user is opted in AND the message is kekeable:
     /// starts with "i'm" or "i am"
     pub async fn is_kekeable(&self) -> Result<bool> {
-        let opted_ins = files::read_to_string("optin.txt")?
-            .lines()
-            .map(|x| x.parse())
-            .collect::<Result<Vec<u64>, _>>();
-        let opted_ins = match opted_ins {
-            Ok(vals) => vals,
-            Err(_) => return Ok(false),
-        };
-        Ok(opted_ins.contains(&self.author_id().await)
-            && (self
-                .original_message()
-                .content
-                .to_lowercase()
-                .starts_with("i'm ")
-                || self
-                    .original_message()
-                    .content
-                    .to_lowercase()
-                    .starts_with("i am ")))
+        let mut kekeable = false;
+        let db = query_database()?;
+        let sql_command = format!("SELECT keke FROM users WHERE id={}", self.author_id().await);
+        let _ = db.prepare(&sql_command)?.query_map((), |row| {
+            kekeable = row.get::<_, bool>(0)?;
+            Ok(())
+        })?;
+        Ok(kekeable)
     }
+    /// "Kekes" the author - that is,
+    /// if the message starts with "I am" or "I'm",
+    /// And the author is opted in,
+    /// their nickname is changed to the rest of their message.
     pub async fn keke_author(&self) -> Result<()> {
         let potential_keke = self
             .original_message()
@@ -250,6 +244,7 @@ impl<'a> BotShard<'a> {
             MessageOrigin::PublicChannel
         }
     }
+    /// Gets the ID of the originating guild
     pub fn guild_id(&self) -> SereneResult<u64> {
         self.original_message()
             .guild_id

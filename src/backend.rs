@@ -1,3 +1,6 @@
+//! deals with parsing and preforming commands,
+//! particularly with the [`Command`] enum.
+
 use crate::shard::BotShard;
 use chrono::Duration;
 use eyre::Result;
@@ -29,7 +32,12 @@ pub enum Command {
     /// Gives a mod notice to the current channel
     Notice(String),
     /// Gives a message privately to the staff bot channel
-    PrivateModMessage { message: String, user: String },
+    PrivateModMessage {
+        #[doc = "The message to send"]
+        message: String,
+        #[doc = "The relevant user"]
+        user: String,
+    },
     /// Shows an XKCD link
     Xkcd(u64),
     /// Sends, literally, https://dontasktoask.com/
@@ -314,9 +322,13 @@ impl Command {
 /// A representation of a time string (e.g. "2h30m")
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Time {
+    /// Number of seconds
     pub seconds: u8,
+    /// Number of minutes
     pub minutes: u8,
+    /// number of hours
     pub hours: u8,
+    /// number of days
     pub days: u8,
 }
 
@@ -368,10 +380,14 @@ impl FromStr for Time {
         Ok(time)
     }
 }
+/// Represents an error from parsing a timestamp
 #[derive(Debug)]
 pub enum TimeErr {
+    /// There was an invalid time specifier (only valid ones are 's', 'm', 'h', and 'd')
     InvalidTimeSpecifier(char),
+    /// There was an error when parsing an integer
     ParseIntError(ParseIntError),
+    /// No time specifier was given
     NoTimeSpecifier,
 }
 
@@ -390,23 +406,40 @@ impl Display for TimeErr {
     }
 }
 
+/// Represents a type of command
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CommandType {
+    /// A ban
     Ban,
+    /// A mute
     Mute,
+    /// An anonymous mod notice
     Notice,
+    /// A private mod message
     PrivateModMessage,
+    /// An XKCD link
     Xkcd,
+    /// dontasktoask.com
     DontAskToAsk,
+    /// Not a valid command
     NotValid,
+    /// Not a command
     NotACommand,
+    /// A help command
     Help,
+    /// A suggestion
     Suggestion,
+    /// A dev command
     Dev,
+    /// Flips a coin
     CoinFlip,
+    /// A random integer between 0 and a bound
     RandomInt,
+    /// Opts into being keke'd
     Optin,
+    /// Opts out of being keke'd
     Optout,
+    /// kekes
     Keke,
 }
 
@@ -603,11 +636,17 @@ impl FromStr for CommandType {
     }
 }
 
+/// Represents the origin of a message (either private or public)
 pub enum MessageOrigin {
+    /// A public channel (inside a server)
     PublicChannel,
+    /// A private channel (inside a DM)
     PrivateChannel,
 }
 
+/// Gets an xkcd from a string.
+/// if the string isn't able to be parsed as a number,
+/// some special keywords link to certain comics.
 pub fn xkcd_from_string(string: &str) -> u64 {
     if let Ok(val) = string.parse() {
         val
