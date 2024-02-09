@@ -5,10 +5,7 @@ use serenity::{
     client::{Cache, Context},
     http::Http,
     model::{
-        channel::{Channel, Message},
-        guild::{Member, PartialGuild},
-        user::User,
-        Permissions,
+        channel::{Channel, Message}, guild::{Guild, Member, PartialGuild}, user::User, voice, Permissions
     },
     Error as SereneError, Result as SereneResult,
 };
@@ -82,6 +79,10 @@ impl<'a> BotShard<'a> {
     /// Attempts to request a [`PartialGuild`] (server) from the http server.
     pub async fn server_request(&self, server_id: impl Into<u64>) -> SereneResult<PartialGuild> {
         self.http_server().get_guild(server_id.into()).await
+    }
+    /// Attempts to request a [`Guild`] from the cache.
+    pub async fn guild_request(&self, server_id: impl Into<u64>) -> SereneResult<Guild> {
+        self.cache().guild(server_id.into()).ok_or(SereneError::Other("Couldn't find guild"))
     }
     /// A reference to the internal [`Http`] server.
     pub fn http_server(&self) -> &Http {
@@ -234,6 +235,19 @@ impl<'a> BotShard<'a> {
         } else {
             Err(SereneError::Other("Not a KEKE, ignorable").into())
         }
+    }
+    /// Queries the author of the message as a [Member].
+    pub async fn author_as_member(&self) -> SereneResult<Member> {
+        self.member_request(self.author_id().await).await
+    }
+    /// Gets the current voice state of the author.
+    pub async fn current_voice_state(&self) -> SereneResult<voice::VoiceState> {
+        Ok(self.guild_request(self.guild_id()?).await?.voice_states[&self.author().id].clone())
+    }
+    /// Attempts to connect to a voice channel.
+    #[cfg(todo)]
+    pub async fn connect_to(&self, channel_id: impl Into<u64>) -> SereneResult<()> {
+        self.channel_request(channel_id).await?.guild().ok_or(SereneError::Other("Couldn't find the channel"))?
     }
     /// Gets the origin of a message. This is either [`MessageOrigin::PrivateChannel`]
     /// or [`MessageOrigin::PublicChannel`].

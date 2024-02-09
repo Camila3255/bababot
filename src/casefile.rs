@@ -64,14 +64,13 @@ impl CaseFileAction {
     pub fn lowest_id_availible() -> Result<u64> {
         let db = query_database()?;
         let mut id = 0;
-        // intentional ignore of () iterator
-        let _ = db
-            .prepare("SELECT TOP 1 FROM cases")?
+        db.prepare("SELECT TOP 1 FROM cases")?
             .query_map((), |row| {
                 let x = row.get::<_, u64>(0)?;
                 id = id.max(x);
                 Ok(())
-            })?;
+            })?
+            .collect::<Result<(), _>>()?;
         Ok(id)
     }
     /// Executes the action using the given shard.
